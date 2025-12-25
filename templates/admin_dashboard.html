@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administrator Dashboard - AML</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .top-nav {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .top-nav h1 {
+            font-size: 24px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .btn-nav {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+
+        .btn-nav:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .welcome-box {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+        }
+
+        .welcome-box h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .dashboard-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .dashboard-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .dashboard-card p {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            display: inline-block;
+            cursor: pointer;
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .date-selector {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .date-selector select {
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <h1>🛡️ AML Dashboard - Administrator</h1>
+        <div class="user-info">
+            <span>{{ user_name }}</span>
+            <span style="background: rgba(255,255,255,0.2); padding: 5px 12px; border-radius: 12px; font-size: 12px;">Administrator</span>
+            <a href="{{ url_for('admin_users') }}" class="btn-nav">Manage Users</a>
+            <a href="{{ url_for('logout') }}" class="btn-nav">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="welcome-box">
+            <h2>Administrator Dashboard</h2>
+            <p>Welcome, {{ user_name }}! As an administrator, you have access to all role-based dashboards and system management features.</p>
+        </div>
+
+        <div class="date-selector">
+            <strong>Select Report Date:</strong>
+            <select id="dateSelect">
+                {% for date in available_dates %}
+                <option value="{{ date }}" {% if date == latest_date %}selected{% endif %}>
+                    {{ date[:4] }}-{{ date[4:6] }}-{{ date[6:8] }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <h3>🛡️ Compliance Officer Dashboard</h3>
+                <p>View priority alerts, required actions, compliance statistics, and complete account overview with regulatory filing recommendations.</p>
+                <a href="#" onclick="viewDashboard('compliance_officer')" class="btn-primary">
+                    View Dashboard
+                </a>
+            </div>
+
+            <div class="dashboard-card">
+                <h3>📈 Risk Analyst Dashboard</h3>
+                <p>Analyze risk distribution, pattern detection (structuring, layering), risk scoring, and ML model insights with confidence scores.</p>
+                <a href="#" onclick="viewDashboard('risk_analyst')" class="btn-primary">
+                    View Dashboard
+                </a>
+            </div>
+
+            <div class="dashboard-card">
+                <h3>⚖️ Regulatory Officer Dashboard</h3>
+                <p>Review compliance violations, regulatory requirements (BSA, PATRIOT Act, OFAC, FinCEN), and reporting deadlines with status tracking.</p>
+                <a href="#" onclick="viewDashboard('regulatory_officer')" class="btn-primary">
+                    View Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function viewDashboard(role) {
+            const date = document.getElementById('dateSelect').value;
+            window.open(`{{ url_for('view_report', date='DATE', role='ROLE') }}`.replace('DATE', date).replace('ROLE', role), '_blank');
+        }
+    </script>
+</body>
+</html>
+
