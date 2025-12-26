@@ -45,22 +45,30 @@ def main():
     supabase_key = os.environ.get('SUPABASE_KEY')
     openai_key = os.environ.get('OPENAI_API_KEY')
 
+    # Check if running in interactive mode
+    is_interactive = sys.stdin.isatty()
+
     if not supabase_key:
         if len(sys.argv) > 1:
             supabase_key = sys.argv[1]
-        else:
+        elif is_interactive:
             supabase_key = input("Enter Supabase service key: ")
+        else:
+            print("✗ Error: SUPABASE_KEY environment variable is required in non-interactive mode")
+            sys.exit(1)
 
     use_ai = False
     if not openai_key:
         if len(sys.argv) > 2:
             openai_key = sys.argv[2]
             use_ai = True
-        else:
+        elif is_interactive:
             response = input("Enter OpenAI API key (or press Enter to skip AI generation): ")
             if response.strip():
                 openai_key = response.strip()
                 use_ai = True
+        else:
+            print("Warning: OpenAI API key not provided, skipping AI generation")
     else:
         use_ai = True
 
@@ -78,7 +86,11 @@ def main():
     print(f"  Number of accounts: {num_accounts}")
     print()
 
-    input("Press Enter to start the pipeline...")
+    # Skip interactive prompts in CI/CD environments
+    if is_interactive:
+        input("Press Enter to start the pipeline...")
+    else:
+        print("Running in non-interactive mode, starting pipeline automatically...")
 
     # Stage 1: Generate raw data
     print("\n" + "=" * 80)
@@ -123,7 +135,12 @@ def main():
     print("STAGE 3: GENERATE ANALYSIS DASHBOARDS")
     print("=" * 80)
 
-    response = input("\nGenerate comprehensive dashboards now? (y/n): ")
+    # Auto-generate dashboards in non-interactive mode
+    if is_interactive:
+        response = input("\nGenerate comprehensive dashboards now? (y/n): ")
+    else:
+        print("\nAuto-generating dashboards in non-interactive mode...")
+        response = 'y'
 
     if response.lower() == 'y':
         cmd = ['python3', '-m', 'layers.access.dashboard_builder']

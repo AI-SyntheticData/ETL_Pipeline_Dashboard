@@ -38,13 +38,9 @@ jobs:
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
-        echo "Running complete pipeline..."
+        echo "Running complete pipeline with dashboard generation..."
         python run_complete_pipeline.py ${{ secrets.SUPABASE_KEY }} ${{ secrets.OPENAI_API_KEY }} ${{ github.event.inputs.num_accounts || '500' }}
 
-    - name: Generate dashboards
-      run: |
-        echo "Generating role-based dashboards..."
-        python -m layers.access.dashboard_builder
 
     - name: Archive dashboard artifacts
       uses: actions/upload-artifact@v4
@@ -61,25 +57,30 @@ jobs:
         destination_dir: reports
         keep_files: true
 
-    - name: Deploy to Render (Web Service)
+    - name: Deploy to Render (Optional)
       env:
         RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
       run: |
-        if [ -n "$RENDER_API_KEY" ]; then
-          echo "Triggering Render deployment..."
-          curl -X POST "https://api.render.com/deploy/srv-${{ secrets.RENDER_SERVICE_ID }}?key=$RENDER_API_KEY"
+        if [ -n "$RENDER_API_KEY" ] && [ -n "$RENDER_SERVICE_ID" ]; then
+          echo "✓ Triggering Render deployment..."
+          curl -X POST "https://api.render.com/deploy/srv-${RENDER_SERVICE_ID}?key=${RENDER_API_KEY}"
         else
-          echo "Render API key not configured, skipping deployment"
+          echo "ℹ️  Render deployment skipped (API key or Service ID not configured)"
+          echo "   To enable Render deployment, add RENDER_API_KEY and RENDER_SERVICE_ID to repository secrets"
         fi
 
     - name: Summary
+      env:
+        RENDER_APP_URL: ${{ secrets.RENDER_APP_URL }}
       run: |
         echo "## 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📊 Dashboard Access" >> $GITHUB_STEP_SUMMARY
         echo "- **GitHub Pages**: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/reports/" >> $GITHUB_STEP_SUMMARY
-        echo "- **Render App**: https://${{ secrets.RENDER_APP_URL || 'your-app.onrender.com' }}" >> $GITHUB_STEP_SUMMARY
+        if [ -n "$RENDER_APP_URL" ]; then
+          echo "- **Render App**: https://${RENDER_APP_URL}" >> $GITHUB_STEP_SUMMARY
+        fi
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 👤 Default Login Credentials" >> $GITHUB_STEP_SUMMARY
         echo "- Compliance Officer: \`compliance@aml.com\` / \`Compliance@123\`" >> $GITHUB_STEP_SUMMARY
