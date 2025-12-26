@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature-ETL-Dashboard
   workflow_dispatch:  # Allow manual trigger
     inputs:
       num_accounts:
