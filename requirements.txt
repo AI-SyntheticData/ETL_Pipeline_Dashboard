@@ -1,0 +1,10 @@
+psycopg2-binary==2.9.11
+supabase
+numpy
+pandas
+scikit-learn
+shap
+flask
+werkzeug
+openai
+gunicorn

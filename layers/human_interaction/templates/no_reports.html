@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>No Reports - AML Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .top-nav {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 60px auto;
+            padding: 0 20px;
+        }
+
+        .message-box {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .message-box h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .message-box p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            display: inline-block;
+            margin: 5px;
+        }
+
+        .code-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            margin: 20px 0;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <h1>🛡️ AML Dashboard</h1>
+        <div>
+            <span>{{ user_name }} ({{ user_role }})</span>
+            <a href="{{ url_for('logout') }}" style="color: white; margin-left: 20px;">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="message-box">
+            <h2>⚠️ No Reports Available</h2>
+            <p>There are no analysis reports available yet. Please generate reports first by running the dashboard generator.</p>
+
+            <div class="code-box">
+                # Generate comprehensive dashboards<br>
+                python3 run_dashboard.py<br>
+                <br>
+                # Or generate individual reports<br>
+                python3 run_aml_analysis.py
+            </div>
+
+            <a href="{{ url_for('dashboard') }}" class="btn">Refresh Dashboard</a>
+            <a href="{{ url_for('logout') }}" class="btn">Logout</a>
+        </div>
+    </div>
+</body>
+</html>
+

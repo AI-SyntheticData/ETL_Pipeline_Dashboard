@@ -1,0 +1,89 @@
+name: Deploy AML Dashboard
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      num_accounts:
+        description: 'Number of accounts to generate'
+        required: false
+        default: '500'
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Generate raw data and run ETL pipeline
+      env:
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        echo "Running complete pipeline..."
+        python run_complete_pipeline.py ${{ secrets.SUPABASE_KEY }} ${{ secrets.OPENAI_API_KEY }} ${{ github.event.inputs.num_accounts || '500' }}
+
+    - name: Generate dashboards
+      run: |
+        echo "Generating role-based dashboards..."
+        python -m layers.access.dashboard_builder
+
+    - name: Archive dashboard artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: aml-dashboards
+        path: output/
+        retention-days: 30
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./output
+        destination_dir: reports
+        keep_files: true
+
+    - name: Deploy to Render (Web Service)
+      env:
+        RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: |
+        if [ -n "$RENDER_API_KEY" ]; then
+          echo "Triggering Render deployment..."
+          curl -X POST "https://api.render.com/deploy/srv-${{ secrets.RENDER_SERVICE_ID }}?key=$RENDER_API_KEY"
+        else
+          echo "Render API key not configured, skipping deployment"
+        fi
+
+    - name: Summary
+      run: |
+        echo "## 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Dashboard Access" >> $GITHUB_STEP_SUMMARY
+        echo "- **GitHub Pages**: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/reports/" >> $GITHUB_STEP_SUMMARY
+        echo "- **Render App**: https://${{ secrets.RENDER_APP_URL || 'your-app.onrender.com' }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 👤 Default Login Credentials" >> $GITHUB_STEP_SUMMARY
+        echo "- Compliance Officer: \`compliance@aml.com\` / \`Compliance@123\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Risk Analyst: \`risk@aml.com\` / \`Risk@123\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Regulatory Officer: \`regulatory@aml.com\` / \`Regulatory@123\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Administrator: \`admin@aml.com\` / \`Admin@123\`" >> $GITHUB_STEP_SUMMARY
+
