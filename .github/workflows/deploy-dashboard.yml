@@ -43,20 +43,13 @@ jobs:
         python run_complete_pipeline.py ${{ secrets.SUPABASE_KEY }} ${{ secrets.OPENAI_API_KEY }} ${{ github.event.inputs.num_accounts || '500' }}
 
 
-    - name: Archive dashboard artifacts
+    - name: Archive dashboard artifacts (Free - 30 days retention)
       uses: actions/upload-artifact@v4
       with:
-        name: aml-dashboards
+        name: aml-dashboards-${{ github.run_number }}
         path: output/
         retention-days: 30
 
-    - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./output
-        destination_dir: reports
-        keep_files: true
 
     - name: Deploy to Render (Optional)
       env:
@@ -75,17 +68,30 @@ jobs:
       env:
         RENDER_APP_URL: ${{ secrets.RENDER_APP_URL }}
       run: |
-        echo "## 🎉 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "## 🎉 Pipeline Complete!" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📊 Dashboard Access" >> $GITHUB_STEP_SUMMARY
-        echo "- **GitHub Pages**: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/reports/" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Download Your Dashboards (100% Free)" >> $GITHUB_STEP_SUMMARY
+        echo "1. Go to the **Artifacts** section below" >> $GITHUB_STEP_SUMMARY
+        echo "2. Click **aml-dashboards-${{ github.run_number }}** to download ZIP" >> $GITHUB_STEP_SUMMARY
+        echo "3. Extract and open HTML files in your browser" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Available Dashboards:**" >> $GITHUB_STEP_SUMMARY
+        echo "- \`dashboard_compliance_officer.html\`" >> $GITHUB_STEP_SUMMARY
+        echo "- \`dashboard_risk_analyst.html\`" >> $GITHUB_STEP_SUMMARY
+        echo "- \`dashboard_regulatory_officer.html\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
         if [ -n "$RENDER_APP_URL" ]; then
+          echo "### 🌐 Web Application (Optional)" >> $GITHUB_STEP_SUMMARY
           echo "- **Render App**: https://${RENDER_APP_URL}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Default Login Credentials:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Compliance Officer: \`compliance@aml.com\` / \`Compliance@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Risk Analyst: \`risk@aml.com\` / \`Risk@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Regulatory Officer: \`regulatory@aml.com\` / \`Regulatory@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Administrator: \`admin@aml.com\` / \`Admin@123\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### 💡 Optional: Deploy Web App" >> $GITHUB_STEP_SUMMARY
+          echo "For a live web application with authentication, deploy to Render.com (free tier)" >> $GITHUB_STEP_SUMMARY
+          echo "See DEPLOYMENT.md for instructions" >> $GITHUB_STEP_SUMMARY
         fi
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 👤 Default Login Credentials" >> $GITHUB_STEP_SUMMARY
-        echo "- Compliance Officer: \`compliance@aml.com\` / \`Compliance@123\`" >> $GITHUB_STEP_SUMMARY
-        echo "- Risk Analyst: \`risk@aml.com\` / \`Risk@123\`" >> $GITHUB_STEP_SUMMARY
-        echo "- Regulatory Officer: \`regulatory@aml.com\` / \`Regulatory@123\`" >> $GITHUB_STEP_SUMMARY
-        echo "- Administrator: \`admin@aml.com\` / \`Admin@123\`" >> $GITHUB_STEP_SUMMARY
 
