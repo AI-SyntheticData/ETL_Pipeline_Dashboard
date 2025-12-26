@@ -5,13 +5,16 @@ services:
     region: oregon
     plan: free
     branch: main
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60 layers.human_interaction.web_application:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: SUPABASE_KEY
-        sync: false  # Must be set manually in Render dashboard or via secrets
+        sync: false  # Set this in Render dashboard with your Supabase service_role key
+      - key: OPENAI_API_KEY
+        sync: false  # Set this in Render dashboard with your OpenAI API key
       - key: SUPABASE_URL
         value: https://pcpurhkthawyipfibehn.supabase.co
       - key: FLASK_ENV

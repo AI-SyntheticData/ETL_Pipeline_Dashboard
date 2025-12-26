@@ -6,11 +6,6 @@ on:
       - main
       - feature-ETL-Dashboard
   workflow_dispatch:  # Allow manual trigger
-    inputs:
-      num_accounts:
-        description: 'Number of accounts to generate'
-        required: false
-        default: '500'
 
 env:
   PYTHON_VERSION: '3.11'
@@ -18,10 +13,15 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Allow pushing commits back to repo
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0  # Fetch all history for proper git operations
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -40,7 +40,7 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         echo "Running complete pipeline with dashboard generation..."
-        python run_complete_pipeline.py ${{ secrets.SUPABASE_KEY }} ${{ secrets.OPENAI_API_KEY }} ${{ github.event.inputs.num_accounts || '500' }}
+        python run_complete_pipeline.py
 
 
     - name: Archive dashboard artifacts (Free - 30 days retention)
@@ -50,8 +50,15 @@ jobs:
         path: output/
         retention-days: 30
 
+    - name: Commit dashboards to repository
+      run: |
+        git config user.name "GitHub Actions Bot"
+        git config user.email "actions@github.com"
+        git add output/
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update dashboards [skip ci]" && git push)
+      continue-on-error: true
 
-    - name: Deploy to Render (Optional)
+    - name: Trigger Dashboard Deployment
       env:
         RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
@@ -59,9 +66,10 @@ jobs:
         if [ -n "$RENDER_API_KEY" ] && [ -n "$RENDER_SERVICE_ID" ]; then
           echo "✓ Triggering Render deployment..."
           curl -X POST "https://api.render.com/deploy/srv-${RENDER_SERVICE_ID}?key=${RENDER_API_KEY}"
+          echo "   Render will rebuild and serve the latest dashboards"
         else
-          echo "ℹ️  Render deployment skipped (API key or Service ID not configured)"
-          echo "   To enable Render deployment, add RENDER_API_KEY and RENDER_SERVICE_ID to repository secrets"
+          echo "ℹ️  Render will auto-deploy on next push to main branch"
+          echo "   Or add RENDER_API_KEY and RENDER_SERVICE_ID to repository secrets for instant deployment"
         fi
 
     - name: Summary
@@ -70,28 +78,30 @@ jobs:
       run: |
         echo "## 🎉 Pipeline Complete!" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📊 Download Your Dashboards (100% Free)" >> $GITHUB_STEP_SUMMARY
-        echo "1. Go to the **Artifacts** section below" >> $GITHUB_STEP_SUMMARY
-        echo "2. Click **aml-dashboards-${{ github.run_number }}** to download ZIP" >> $GITHUB_STEP_SUMMARY
-        echo "3. Extract and open HTML files in your browser" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Available Dashboards:**" >> $GITHUB_STEP_SUMMARY
-        echo "- \`dashboard_compliance_officer.html\`" >> $GITHUB_STEP_SUMMARY
-        echo "- \`dashboard_risk_analyst.html\`" >> $GITHUB_STEP_SUMMARY
-        echo "- \`dashboard_regulatory_officer.html\`" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🌐 Access Your Live Dashboard (One-Stop URL)" >> $GITHUB_STEP_SUMMARY
         if [ -n "$RENDER_APP_URL" ]; then
-          echo "### 🌐 Web Application (Optional)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Render App**: https://${RENDER_APP_URL}" >> $GITHUB_STEP_SUMMARY
+          echo "**Live Application**: https://${RENDER_APP_URL}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Default Login Credentials:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Compliance Officer: \`compliance@aml.com\` / \`Compliance@123\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Risk Analyst: \`risk@aml.com\` / \`Risk@123\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Regulatory Officer: \`regulatory@aml.com\` / \`Regulatory@123\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Administrator: \`admin@aml.com\` / \`Admin@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Login Credentials (Choose Your Role):**" >> $GITHUB_STEP_SUMMARY
+          echo "- 👔 Compliance Officer: \`compliance@aml.com\` / \`Compliance@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 Risk Analyst: \`risk@aml.com\` / \`Risk@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 Regulatory Officer: \`regulatory@aml.com\` / \`Regulatory@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔧 Administrator: \`admin@aml.com\` / \`Admin@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️  Render free tier may take ~30 seconds to wake if idle > 15 minutes" >> $GITHUB_STEP_SUMMARY
         else
-          echo "### 💡 Optional: Deploy Web App" >> $GITHUB_STEP_SUMMARY
-          echo "For a live web application with authentication, deploy to Render.com (free tier)" >> $GITHUB_STEP_SUMMARY
-          echo "See DEPLOYMENT.md for instructions" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️  To enable live dashboard access, deploy to Render:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to https://render.com and connect this repository" >> $GITHUB_STEP_SUMMARY
+          echo "2. Render will auto-detect render.yaml and deploy" >> $GITHUB_STEP_SUMMARY
+          echo "3. Add SUPABASE_KEY and OPENAI_API_KEY in Render environment variables" >> $GITHUB_STEP_SUMMARY
+          echo "4. Your app will be live at: https://your-app.onrender.com" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**100% FREE - No credit card required!**" >> $GITHUB_STEP_SUMMARY
         fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 Optional: Download Dashboards (Offline)" >> $GITHUB_STEP_SUMMARY
+        echo "If you prefer to download and view locally:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Scroll to **Artifacts** section below" >> $GITHUB_STEP_SUMMARY
+        echo "2. Click **aml-dashboards-${{ github.run_number }}** to download ZIP" >> $GITHUB_STEP_SUMMARY
+        echo "3. Extract and open HTML files in browser" >> $GITHUB_STEP_SUMMARY
 

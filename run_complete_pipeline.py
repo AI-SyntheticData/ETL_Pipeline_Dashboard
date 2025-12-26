@@ -72,8 +72,8 @@ def main():
     else:
         use_ai = True
 
-    # Get number of accounts
-    num_accounts = 500
+    # Get number of accounts (default: 100 for faster processing)
+    num_accounts = 100
     if len(sys.argv) > 3:
         try:
             num_accounts = int(sys.argv[3])
