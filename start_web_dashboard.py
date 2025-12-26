@@ -32,11 +32,12 @@ def main():
             print("  pip install flask werkzeug")
             sys.exit(1)
 
-    # Ensure templates directory exists
-    if not os.path.exists('templates'):
-        print("Creating templates directory...")
-        os.makedirs('templates', exist_ok=True)
-        print("✓ Templates directory created\n")
+    # Check if templates exist in layers
+    templates_path = os.path.join('layers', 'human_interaction', 'templates')
+    if not os.path.exists(templates_path):
+        print("⚠️  WARNING: Templates directory not found")
+        print(f"  Expected location: {templates_path}")
+        print("\nWeb application may not work correctly.\n")
 
     # Ensure output directory exists
     if not os.path.exists('output'):
@@ -55,7 +56,7 @@ def main():
     if not has_reports:
         print("⚠️  WARNING: No reports found in output/ directory")
         print("\nYou should generate dashboards first:")
-        print("  python3 run_dashboard.py")
+        print("  python3 -m layers.access.dashboard_builder")
         print("\nContinuing anyway (you can still login)...\n")
 
     print("Starting Flask web server...")
@@ -79,7 +80,7 @@ def main():
     print("\n")
 
     try:
-        subprocess.run([sys.executable, 'app.py'])
+        subprocess.run([sys.executable, '-m', 'layers.human_interaction.web_application'])
     except KeyboardInterrupt:
         print("\n\n" + "=" * 80)
         print("Server stopped")

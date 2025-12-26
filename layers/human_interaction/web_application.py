@@ -12,7 +12,15 @@ import os
 from datetime import datetime, timedelta
 import secrets
 
-app = Flask(__name__)
+# Get the directory where this module is located
+MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Templates are in the same directory structure
+TEMPLATE_DIR = os.path.join(MODULE_DIR, 'templates')
+# Output directory is at project root
+PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_DIR, '..', '..'))
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, 'output')
+
+app = Flask(__name__, template_folder=TEMPLATE_DIR)
 app.secret_key = secrets.token_hex(32)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -128,11 +136,10 @@ def dashboard():
     user_name = session.get('user_name')
 
     # Get the latest report date
-    output_dir = 'output'
     date_dirs = []
-    if os.path.exists(output_dir):
-        date_dirs = sorted([d for d in os.listdir(output_dir)
-                          if os.path.isdir(os.path.join(output_dir, d))], reverse=True)
+    if os.path.exists(OUTPUT_DIR):
+        date_dirs = sorted([d for d in os.listdir(OUTPUT_DIR)
+                          if os.path.isdir(os.path.join(OUTPUT_DIR, d))], reverse=True)
 
     if not date_dirs:
         flash('No reports available. Please generate reports first.', 'warning')
@@ -155,7 +162,7 @@ def dashboard():
             flash('Invalid role configuration.', 'danger')
             return redirect(url_for('logout'))
 
-    dashboard_path = os.path.join(output_dir, latest_date, dashboard_file)
+    dashboard_path = os.path.join(OUTPUT_DIR, latest_date, dashboard_file)
 
     if not os.path.exists(dashboard_path):
         flash(f'Dashboard not found for {user_role}. Please generate reports.', 'warning')
@@ -189,13 +196,13 @@ def view_report(date, role):
             return redirect(url_for('dashboard'))
 
     dashboard_file = f'dashboard_{role}.html'
-    dashboard_path = os.path.join('output', date, dashboard_file)
+    dashboard_path = os.path.join(OUTPUT_DIR, date, dashboard_file)
 
     if not os.path.exists(dashboard_path):
         flash('Report not found.', 'warning')
         return redirect(url_for('dashboard'))
 
-    return send_from_directory(os.path.join('output', date), dashboard_file)
+    return send_from_directory(os.path.join(OUTPUT_DIR, date), dashboard_file)
 
 
 @app.route('/admin/users')
@@ -231,11 +238,8 @@ def internal_error(error):
 
 
 if __name__ == '__main__':
-    # Create templates directory if it doesn't exist
-    os.makedirs('templates', exist_ok=True)
-
     # Ensure output directory exists
-    os.makedirs('output', exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     print("\n" + "=" * 80)
     print("AML DASHBOARD WEB APPLICATION")

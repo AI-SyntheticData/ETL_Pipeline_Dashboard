@@ -85,7 +85,7 @@ def main():
     print("STAGE 1: GENERATE RAW DATA WITH AI")
     print("=" * 80)
 
-    cmd = ['python3', 'generate_raw_data.py']
+    cmd = ['python3', '-m', 'layers.data_pipeline.raw_data_generator']
     if use_ai:
         cmd.append(openai_key)
     cmd.append(str(num_accounts))
@@ -110,7 +110,7 @@ def main():
     print("STAGE 2: ETL PIPELINE - APPLY AML DETECTION RULES")
     print("=" * 80)
 
-    cmd = ['python3', 'etl_pipeline.py', raw_data_file, supabase_key]
+    cmd = ['python3', '-m', 'layers.data_pipeline.etl_processor', raw_data_file, supabase_key]
 
     if not run_command(cmd, "Running ETL pipeline..."):
         print("\n✗ Failed to run ETL pipeline")
@@ -126,7 +126,7 @@ def main():
     response = input("\nGenerate comprehensive dashboards now? (y/n): ")
 
     if response.lower() == 'y':
-        cmd = ['python3', 'run_dashboard.py']
+        cmd = ['python3', '-m', 'layers.access.dashboard_builder']
 
         if not run_command(cmd, "Generating dashboards..."):
             print("\n✗ Failed to generate dashboards")
@@ -135,7 +135,7 @@ def main():
         print("\n✓ Dashboards generated successfully")
     else:
         print("\nSkipping dashboard generation. You can run later with:")
-        print("  python3 run_dashboard.py")
+        print("  python3 -m layers.access.dashboard_builder")
 
     # Summary
     print("\n" + "=" * 80)
@@ -152,15 +152,13 @@ def main():
 
     print("\nNext steps:")
     if response.lower() != 'y':
-        print("  1. Generate dashboards: python3 run_dashboard.py")
+        print("  1. Generate dashboards: python3 -m layers.access.dashboard_builder")
         print("  2. Start web interface: python3 start_web_dashboard.py")
     else:
         print("  1. Start web interface: python3 start_web_dashboard.py")
         print("  2. Login at: http://127.0.0.1:5000")
         print("  3. View role-based dashboards")
 
-    print("\nOr analyze individual accounts:")
-    print("  python3 run_aml_analysis.py")
 
     print("\n" + "=" * 80 + "\n")
 

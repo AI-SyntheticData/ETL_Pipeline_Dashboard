@@ -209,3 +209,16 @@ __marimo__/
 # AML Analysis Output
 output/
 aml_analysis_ACC*.py
+
+# Layer-specific ignores
+layers/data_pipeline/__pycache__/
+layers/explanation/__pycache__/
+layers/access/__pycache__/
+layers/human_interaction/__pycache__/
+
+# Generated data
+*.json
+
+# Temporary files
+wrappers/
+
