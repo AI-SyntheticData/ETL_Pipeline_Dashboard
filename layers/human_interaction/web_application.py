@@ -245,9 +245,15 @@ if __name__ == '__main__':
     print("AML DASHBOARD WEB APPLICATION")
     print("=" * 80)
     print("\nStarting server...")
+
+    # Get host and port from environment or use defaults
+    host = os.environ.get('HOST', '127.0.0.1')
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'true').lower() == 'true'
+
     print("\nAccess the dashboard at:")
-    print("  http://localhost:5000")
-    print("  http://127.0.0.1:5000")
+    print(f"  http://localhost:{port}")
+    print(f"  http://127.0.0.1:{port}")
     print("  or")
     print("  https://accessibleuidashboard-financialdata/ (with proper DNS/proxy)")
     print("\nDefault login credentials:")
@@ -257,6 +263,6 @@ if __name__ == '__main__':
     print("  Administrator:      admin@aml.com / Admin@123")
     print("\n" + "=" * 80 + "\n")
 
-    # Run with threaded mode and allow connections from any interface
-    app.run(host='127.0.0.1', port=5000, debug=True, threaded=True, use_reloader=False)
+    # Run with threaded mode
+    app.run(host=host, port=port, debug=debug, threaded=True, use_reloader=False)
 
