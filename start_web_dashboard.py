@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AML Dashboard Web Application - Quick Start
-Starts the Flask web server for the role-based dashboard UI
+Runs the complete pipeline, then starts the Flask web server for the role-based dashboard UI
 """
 
 import subprocess
@@ -16,9 +16,66 @@ def check_flask():
     except ImportError:
         return False
 
+def run_pipeline():
+    """Run the complete ETL pipeline to generate dashboards"""
+    print("\n" + "=" * 80)
+    print("STEP 1: RUNNING COMPLETE PIPELINE")
+    print("=" * 80 + "\n")
+
+    print("This will:")
+    print("  1. Generate raw financial data")
+    print("  2. Apply ETL transformations and AML detection")
+    print("  3. Load data to database (if SUPABASE_KEY is set)")
+    print("  4. Generate role-based dashboards")
+    print()
+
+    # Get environment variables
+    supabase_key = os.environ.get('SUPABASE_KEY', '')
+    openai_key = os.environ.get('OPENAI_API_KEY', '')
+
+    # Build command - run in non-interactive mode
+    cmd = [sys.executable, 'run_complete_pipeline.py']
+
+    if supabase_key:
+        cmd.append(supabase_key)
+        print("✓ SUPABASE_KEY detected")
+    else:
+        print("ℹ️  SUPABASE_KEY not set - will skip database loading")
+        # Use a dummy key to keep the script running
+        cmd.append('dummy_key_skip_db')
+
+    if openai_key:
+        cmd.append(openai_key)
+        print("✓ OPENAI_API_KEY detected - will use AI generation")
+    else:
+        print("ℹ️  OPENAI_API_KEY not set - will use rule-based generation")
+
+    # Use fewer accounts for faster startup (50 instead of 100)
+    cmd.append('50')
+
+    print("\nStarting pipeline...\n")
+
+    try:
+        # Run pipeline with stdin redirected to prevent interactive prompts
+        result = subprocess.run(
+            cmd,
+            check=True,
+            stdin=subprocess.DEVNULL,  # Prevent interactive prompts
+            env={**os.environ, 'PYTHONUNBUFFERED': '1'}  # Show output immediately
+        )
+        print("\n✓ Pipeline completed successfully!\n")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"\n✗ Pipeline failed with error: {e}")
+        print("\nℹ️  You can still start the web server, but dashboards may be missing.")
+        return False
+    except KeyboardInterrupt:
+        print("\n\nPipeline interrupted by user")
+        return False
+
 def main():
     print("\n" + "=" * 80)
-    print("AML DASHBOARD WEB APPLICATION - STARTING")
+    print("AML DASHBOARD - COMPLETE STARTUP")
     print("=" * 80 + "\n")
 
     # Check if Flask is installed
@@ -53,31 +110,38 @@ def main():
                 has_reports = True
                 break
 
+    # Run pipeline if no reports exist OR if user wants fresh data
     if not has_reports:
-        print("⚠️  WARNING: No reports found in output/ directory")
-        print("\nYou should generate dashboards first:")
-        print("  python3 -m layers.access.dashboard_builder")
-        print("\nContinuing anyway (you can still login)...\n")
+        print("ℹ️  No dashboards found. Running pipeline to generate them...\n")
+        run_pipeline()
+    else:
+        print("✓ Existing dashboards found in output/ directory")
+        print("  Using existing dashboards to start server faster...\n")
+        print("  💡 To regenerate dashboards, run: python3 run_complete_pipeline.py\n")
+
+    print("\n" + "=" * 80)
+    print("STEP 2: STARTING WEB SERVER")
+    print("=" * 80 + "\n")
 
     print("Starting Flask web server...")
     print("\nThe dashboard will be available at:")
     print("  • http://localhost:5000")
     print("  • http://127.0.0.1:5000")
+
+    # Check if running in Codespaces or container
+    if os.environ.get('CODESPACES') or os.environ.get('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN'):
+        print("  • Port 5000 will be automatically forwarded in Codespaces")
+
     print("\nFor production deployment with custom domain:")
     print("  • Configure DNS: accessibleuidashboard-financialdata → your_server_ip")
     print("  • Use reverse proxy (nginx/apache) with SSL certificate")
     print("\nDefault login credentials:")
-    print("  Compliance Officer: compliance@aml.com / Compliance@123")
-    print("  Risk Analyst:       risk@aml.com / Risk@123")
-    print("  Regulatory Officer: regulatory@aml.com / Regulatory@123")
-    print("  Administrator:      admin@aml.com / Admin@123")
+    print("  👔 Compliance Officer: compliance@aml.com / Compliance@123")
+    print("  📊 Risk Analyst:       risk@aml.com / Risk@123")
+    print("  📋 Regulatory Officer: regulatory@aml.com / Regulatory@123")
+    print("  🔧 Administrator:      admin@aml.com / Admin@123")
     print("\n" + "=" * 80 + "\n")
     print("Press Ctrl+C to stop the server\n")
-    print("If you get a 403 error:")
-    print("  1. Try http://127.0.0.1:5000 instead of localhost:5000")
-    print("  2. Check if another process is using port 5000")
-    print("  3. Try clearing browser cache and cookies")
-    print("\n")
 
     try:
         subprocess.run([sys.executable, '-m', 'layers.human_interaction.web_application'])
