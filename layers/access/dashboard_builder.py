@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AML Comprehensive Dashboard Generator
+Accessible ETL Pipeline Dashboard Generator
 Analyzes ALL accounts and generates role-based HTML dashboards with 2-panel layout:
 - Left Panel: Data Flow Visualization
 - Right Panel: Detailed Analysis
@@ -19,8 +19,13 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 import shap
+from lime.lime_tabular import LimeTabularExplainer
 import warnings
 warnings.filterwarnings('ignore')
+
+# Import new components
+from layers.data_pipeline.data_lineage import get_lineage_tracker
+from layers.human_interaction.feedback_system import add_feedback_to_dashboard
 
 # Supabase Configuration
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://pcpurhkthawyipfibehn.supabase.co')
@@ -113,7 +118,7 @@ def prepare_training_data(data):
 
 
 def train_model_and_explain(data):
-    """Train RandomForest model and create SHAP explainer"""
+    """Train RandomForest model and create SHAP and LIME explainers"""
     print("Training RandomForest model...")
 
     X, y, account_ids = prepare_training_data(data)
@@ -129,17 +134,28 @@ def train_model_and_explain(data):
     print(f"✓ Model trained (Accuracy: {model.score(X, y):.2%})")
 
     print("Creating SHAP explainer...")
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X)
+    shap_explainer = shap.TreeExplainer(model)
+    shap_values = shap_explainer.shap_values(X)
 
-    print("✓ SHAP explainer ready\n")
+    print("✓ SHAP explainer ready")
 
-    return model, explainer, X, shap_values, account_ids
+    print("Creating LIME explainer...")
+    lime_explainer = LimeTabularExplainer(
+        X.values,
+        feature_names=X.columns.tolist(),
+        class_names=['Low Risk', 'High Risk'],
+        mode='classification',
+        random_state=42
+    )
+    print("✓ LIME explainer ready\n")
 
 
-def analyze_all_accounts(data, model, X, shap_values, account_ids_list):
-    """Analyze all accounts and return comprehensive results"""
-    print("Analyzing all accounts...")
+    return model, shap_explainer, lime_explainer, X, shap_values, account_ids
+
+
+def analyze_all_accounts(data, model, lime_explainer, X, shap_values, account_ids_list):
+    """Analyze all accounts and return comprehensive results with LIME and SHAP explanations"""
+    print("Analyzing all accounts with XAI models (LIME & SHAP)...")
 
     accounts = data['accounts']
     transactions = data['transactions']
@@ -190,6 +206,19 @@ def analyze_all_accounts(data, model, X, shap_values, account_ids_list):
         else:
             account_shap = None
 
+        # Get LIME explanation for this account
+        lime_explanation = None
+        if lime_explainer and idx < len(X):
+            try:
+                lime_exp = lime_explainer.explain_instance(
+                    X.iloc[idx].values,
+                    model.predict_proba,
+                    num_features=len(X.columns)
+                )
+                lime_explanation = lime_exp.as_list()
+            except:
+                lime_explanation = None
+
         results.append({
             'account': account,
             'risk_level': risk_level,
@@ -199,22 +228,492 @@ def analyze_all_accounts(data, model, X, shap_values, account_ids_list):
             'wire_transfers': account_wires,
             'audit_logs': account_logs,
             'shap_values': account_shap,
+            'lime_explanation': lime_explanation,
             'features': X.iloc[idx].to_dict() if idx < len(X) else {}
         })
 
     # Sort by confidence (highest risk first)
     results.sort(key=lambda x: x['confidence'], reverse=True)
 
-    print(f"✓ Analyzed {len(results)} accounts\n")
+    print(f"✓ Analyzed {len(results)} accounts with XAI explanations\n")
 
     return results
 
 
+def generate_compliance_charts_html(stats, results):
+    """Generate charts specific to Compliance Officer role"""
+
+    # SAR Filing trends
+    sar_filed = len([r for r in results if any(l.get('event_type') == 'SAR_FILED' for l in r.get('audit_logs', []))])
+    sar_pending = stats['high_risk_count'] - sar_filed
+
+    charts_html = f"""
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    
+    <style>
+        .charts-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }}
+        .chart-box {{
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        .chart-box h3 {{
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }}
+        .chart-canvas {{
+            max-height: 300px;
+        }}
+    </style>
+    
+    <div class="charts-container">
+        <!-- SAR Status Chart -->
+        <div class="chart-box">
+            <h3>🚨 SAR Filing Status</h3>
+            <canvas id="sarChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- Compliance Priority Chart -->
+        <div class="chart-box">
+            <h3>⚠️ Compliance Priorities</h3>
+            <canvas id="compliancePriorityChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- Account Status Chart -->
+        <div class="chart-box">
+            <h3>📋 Account Status</h3>
+            <canvas id="accountStatusChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- Action Required Chart -->
+        <div class="chart-box">
+            <h3>✅ Actions Required</h3>
+            <canvas id="actionChart" class="chart-canvas"></canvas>
+        </div>
+    </div>
+    
+    <script>
+    // SAR Status Chart
+    const sarCtx = document.getElementById('sarChart').getContext('2d');
+    new Chart(sarCtx, {{
+        type: 'doughnut',
+        data: {{
+            labels: ['SARs Filed', 'SARs Pending', 'No Action Needed'],
+            datasets: [{{
+                data: [{sar_filed}, {sar_pending}, {stats['low_risk_count']}],
+                backgroundColor: ['#10b981', '#f59e0b', '#3b82f6'],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {{
+                legend: {{ position: 'bottom' }}
+            }}
+        }}
+    }});
+    
+    // Compliance Priority Chart
+    const priorityCtx = document.getElementById('compliancePriorityChart').getContext('2d');
+    new Chart(priorityCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['Sanctioned', 'PEP', 'High Risk', 'KYC Incomplete'],
+            datasets: [{{
+                label: 'Count',
+                data: [{stats['sanctioned_count']}, {stats['pep_count']}, {stats['high_risk_count']}, {len([r for r in results if 'INCOMPLETE_KYC' in r['risk_flags']])}],
+                backgroundColor: ['#ef4444', '#f59e0b', '#f97316', '#8b5cf6'],
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    
+    // Account Status Chart
+    const statusCtx = document.getElementById('accountStatusChart').getContext('2d');
+    new Chart(statusCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['High Risk', 'Medium Risk', 'Low Risk'],
+            datasets: [{{
+                label: 'Accounts',
+                data: [{stats['high_risk_count']}, {stats['medium_risk_count']}, {stats['low_risk_count']}],
+                backgroundColor: ['#ef4444', '#f59e0b', '#10b981'],
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ x: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    
+    // Action Required Chart
+    const actionCtx = document.getElementById('actionChart').getContext('2d');
+    new Chart(actionCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['EDD Required', 'SAR Pending', 'Account Freeze', 'Document Review'],
+            datasets: [{{
+                label: 'Actions',
+                data: [{stats['pep_count']}, {sar_pending}, {stats['sanctioned_count']}, {stats['alert_count']}],
+                backgroundColor: '#667eea',
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    </script>
+    """
+
+    return charts_html
+
+
+def generate_risk_analyst_charts_html(stats, results):
+    """Generate charts specific to Risk Analyst role"""
+
+    # Pattern analysis
+    structuring = len([r for r in results if any('STRUCTURING' in str(t.get('anomaly_type', '')) for t in r['transactions'])])
+    layering = len([r for r in results if len(r['wire_transfers']) >= 3])
+    high_value = len([r for r in results if any(float(t.get('amount', 0)) > 15000 for t in r['transactions'])])
+
+    charts_html = f"""
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    
+    <style>
+        .charts-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }}
+        .chart-box {{
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        .chart-box h3 {{
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }}
+        .chart-canvas {{
+            max-height: 300px;
+        }}
+    </style>
+    
+    <div class="charts-container">
+        <!-- Risk Score Distribution -->
+        <div class="chart-box">
+            <h3>📊 Risk Score Distribution</h3>
+            <canvas id="riskScoreChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- AML Pattern Detection -->
+        <div class="chart-box">
+            <h3>🔍 AML Pattern Detection</h3>
+            <canvas id="patternChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- Transaction Risk Analysis -->
+        <div class="chart-box">
+            <h3>💰 Transaction Risk Analysis</h3>
+            <canvas id="txnRiskChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- Risk Confidence Levels -->
+        <div class="chart-box">
+            <h3>🎯 ML Model Confidence</h3>
+            <canvas id="confidenceChart" class="chart-canvas"></canvas>
+        </div>
+    </div>
+    
+    <script>
+    // Risk Score Distribution
+    const riskScoreCtx = document.getElementById('riskScoreChart').getContext('2d');
+    new Chart(riskScoreCtx, {{
+        type: 'doughnut',
+        data: {{
+            labels: ['High Risk (75-100)', 'Medium Risk (50-75)', 'Low Risk (0-50)'],
+            datasets: [{{
+                data: [{stats['high_risk_count']}, {stats['medium_risk_count']}, {stats['low_risk_count']}],
+                backgroundColor: ['#ef4444', '#f59e0b', '#10b981'],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {{ legend: {{ position: 'bottom' }} }}
+        }}
+    }});
+    
+    // AML Pattern Detection
+    const patternCtx = document.getElementById('patternChart').getContext('2d');
+    new Chart(patternCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['Structuring', 'Layering', 'High Value', 'Suspicious Wires'],
+            datasets: [{{
+                label: 'Detected Patterns',
+                data: [{structuring}, {layering}, {high_value}, {stats['suspicious_wires']}],
+                backgroundColor: ['#8b5cf6', '#ec4899', '#f59e0b', '#ef4444'],
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    
+    // Transaction Risk Analysis
+    const txnRiskCtx = document.getElementById('txnRiskChart').getContext('2d');
+    new Chart(txnRiskCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['Total Txns', 'Alert Txns', 'Wire Transfers', 'Suspicious Wires'],
+            datasets: [{{
+                label: 'Volume',
+                data: [{stats['total_transactions']}, {stats['alert_count']}, {stats['total_wires']}, {stats['suspicious_wires']}],
+                backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b'],
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    
+    // ML Model Confidence
+    const confidenceCtx = document.getElementById('confidenceChart').getContext('2d');
+    new Chart(confidenceCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['>90% Confidence', '75-90%', '50-75%', '<50%'],
+            datasets: [{{
+                label: 'Accounts',
+                data: [
+                    {len([r for r in results if r['confidence'] > 90])},
+                    {len([r for r in results if 75 < r['confidence'] <= 90])},
+                    {len([r for r in results if 50 < r['confidence'] <= 75])},
+                    {len([r for r in results if r['confidence'] <= 50])}
+                ],
+                backgroundColor: '#667eea',
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    </script>
+    """
+
+    return charts_html
+
+
+def generate_regulatory_charts_html(stats, results):
+    """Generate charts specific to Regulatory Officer role"""
+
+    # Regulatory compliance metrics
+    ctr_candidates = len([r for r in results if any(float(t.get('amount', 0)) > 10000 for t in r['transactions'])])
+    kyc_complete = len([r for r in results if 'INCOMPLETE_KYC' not in r['risk_flags']])
+    kyc_pending = len([r for r in results if 'INCOMPLETE_KYC' in r['risk_flags']])
+
+    charts_html = f"""
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    
+    <style>
+        .charts-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }}
+        .chart-box {{
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        .chart-box h3 {{
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }}
+        .chart-canvas {{
+            max-height: 300px;
+        }}
+    </style>
+    
+    <div class="charts-container">
+        <!-- Regulatory Compliance Status -->
+        <div class="chart-box">
+            <h3>⚖️ Regulatory Compliance Status</h3>
+            <canvas id="regComplianceChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- Reporting Requirements -->
+        <div class="chart-box">
+            <h3>📋 Reporting Requirements</h3>
+            <canvas id="reportingChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- KYC/CDD Status -->
+        <div class="chart-box">
+            <h3>🔍 KYC/CDD Compliance</h3>
+            <canvas id="kycChart" class="chart-canvas"></canvas>
+        </div>
+        
+        <!-- Violation Severity -->
+        <div class="chart-box">
+            <h3>⚠️ Violation Severity</h3>
+            <canvas id="violationChart" class="chart-canvas"></canvas>
+        </div>
+    </div>
+    
+    <script>
+    // Regulatory Compliance Status
+    const regComplianceCtx = document.getElementById('regComplianceChart').getContext('2d');
+    new Chart(regComplianceCtx, {{
+        type: 'doughnut',
+        data: {{
+            labels: ['Compliant', 'Minor Issues', 'Major Issues'],
+            datasets: [{{
+                data: [{stats['low_risk_count']}, {stats['medium_risk_count']}, {stats['high_risk_count']}],
+                backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {{ legend: {{ position: 'bottom' }} }}
+        }}
+    }});
+    
+    // Reporting Requirements
+    const reportingCtx = document.getElementById('reportingChart').getContext('2d');
+    new Chart(reportingCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['SARs Filed', 'CTR Candidates', 'PEP Reports', 'Sanctions Hits'],
+            datasets: [{{
+                label: 'Count',
+                data: [{stats['sar_count']}, {ctr_candidates}, {stats['pep_count']}, {stats['sanctioned_count']}],
+                backgroundColor: ['#8b5cf6', '#3b82f6', '#f59e0b', '#ef4444'],
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    
+    // KYC/CDD Status
+    const kycCtx = document.getElementById('kycChart').getContext('2d');
+    new Chart(kycCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['KYC Complete', 'KYC Pending', 'EDD Required'],
+            datasets: [{{
+                label: 'Accounts',
+                data: [{kyc_complete}, {kyc_pending}, {stats['pep_count']}],
+                backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ x: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    
+    // Violation Severity
+    const violationCtx = document.getElementById('violationChart').getContext('2d');
+    new Chart(violationCtx, {{
+        type: 'bar',
+        data: {{
+            labels: ['Critical', 'High', 'Medium', 'Low'],
+            datasets: [{{
+                label: 'Violations',
+                data: [
+                    {stats['sanctioned_count']},
+                    {len([r for r in results if r['risk_level'] == 'HIGH' and 'SANCTIONED' not in r['risk_flags']])},
+                    {stats['medium_risk_count']},
+                    {len([r for r in results if r['risk_level'] == 'LOW' and r['confidence'] > 30])}
+                ],
+                backgroundColor: ['#7f1d1d', '#ef4444', '#f59e0b', '#fde047'],
+                borderWidth: 1
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }},
+            plugins: {{ legend: {{ display: false }} }}
+        }}
+    }});
+    </script>
+    """
+
+    return charts_html
+
+
 def generate_data_flow_html(stats):
     """Generate data flow visualization HTML"""
+
+    # Get lineage visualization
+    lineage = get_lineage_tracker()
+    lineage_html = ""
+    if lineage.lineage_records:
+        lineage_html = lineage.generate_lineage_visualization_html()
+
     return f"""
     <div class="data-flow">
         <h2>Data Flow Overview</h2>
+        
+        {lineage_html}
         
         <div class="flow-diagram">
             <div class="flow-node source">
@@ -273,19 +772,256 @@ def generate_data_flow_html(stats):
                 <li>✓ {stats['total_wires']} wire transfers examined</li>
                 <li>✓ {stats['total_logs']} audit log entries reviewed</li>
                 <li>✓ ML model trained with {stats['total_accounts']} samples</li>
-                <li>✓ SHAP explainability computed</li>
+                <li>✓ XAI explainability (LIME + SHAP) computed</li>
             </ul>
         </div>
     </div>
     """
 
 
+def generate_four_table_tabs(results, stats):
+    """Generate 4-table tabs view with explicit issues for each table"""
+
+    # Analyze issues per table
+    accounts_issues = []
+    transactions_issues = []
+    wire_transfers_issues = []
+    audit_logs_issues = []
+
+    for result in results:
+        account = result['account']
+        account_id = account['account_id']
+
+        # Account issues
+        if result['risk_level'] == 'HIGH':
+            accounts_issues.append({
+                'account_id': account_id,
+                'issue': f"High Risk Score: {account.get('risk_score', 0)}",
+                'severity': 'critical'
+            })
+        if account.get('is_sanctioned'):
+            accounts_issues.append({
+                'account_id': account_id,
+                'issue': 'Sanctioned Entity',
+                'severity': 'critical'
+            })
+        if account.get('is_pep'):
+            accounts_issues.append({
+                'account_id': account_id,
+                'issue': 'PEP Account',
+                'severity': 'warning'
+            })
+        if account.get('kyc_status') == 'INCOMPLETE':
+            accounts_issues.append({
+                'account_id': account_id,
+                'issue': 'Incomplete KYC',
+                'severity': 'warning'
+            })
+
+        # Transaction issues
+        for txn in result['transactions']:
+            if txn.get('alert_generated'):
+                transactions_issues.append({
+                    'account_id': account_id,
+                    'transaction_id': txn.get('transaction_id'),
+                    'issue': f"{txn.get('anomaly_type', 'Suspicious Activity')} - ${txn.get('amount', 0):,.2f}",
+                    'severity': 'critical' if float(txn.get('amount', 0)) > 10000 else 'warning'
+                })
+
+        # Wire transfer issues
+        for wire in result['wire_transfers']:
+            if wire.get('is_suspicious'):
+                wire_transfers_issues.append({
+                    'account_id': account_id,
+                    'wire_id': wire.get('wire_id'),
+                    'issue': f"Suspicious Wire to {wire.get('destination_country', 'Unknown')} - ${wire.get('amount', 0):,.2f}",
+                    'severity': 'critical'
+                })
+
+        # Audit log issues
+        for log in result['audit_logs']:
+            if log.get('event_type') == 'SAR_FILED':
+                audit_logs_issues.append({
+                    'account_id': account_id,
+                    'event': 'SAR Filed',
+                    'issue': f"SAR Filed: {log.get('description', 'Suspicious Activity')}",
+                    'severity': 'info'
+                })
+
+    html = f"""
+    <div class="tabs-container">
+        <h2>📊 Data Analysis by Table</h2>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="openTab(event, 'accounts-tab')">
+                👤 Accounts ({len(results)})
+            </button>
+            <button class="tab" onclick="openTab(event, 'transactions-tab')">
+                💰 Transactions ({stats['total_transactions']})
+            </button>
+            <button class="tab" onclick="openTab(event, 'wires-tab')">
+                🌐 Wire Transfers ({stats['total_wires']})
+            </button>
+            <button class="tab" onclick="openTab(event, 'logs-tab')">
+                📋 Audit Logs ({stats['total_logs']})
+            </button>
+        </div>
+        
+        <!-- Accounts Tab -->
+        <div id="accounts-tab" class="tab-content active">
+            <div class="table-summary">
+                <h4>Account Openings Analysis</h4>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="number">{len(results)}</div>
+                        <div class="label">Total Accounts</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['high_risk_count']}</div>
+                        <div class="label">High Risk</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['pep_count']}</div>
+                        <div class="label">PEP Accounts</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['sanctioned_count']}</div>
+                        <div class="label">Sanctioned</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len(accounts_issues)}</div>
+                        <div class="label">Total Issues</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>🚨 Account Issues ({len(accounts_issues)})</h3>
+            {f'<table class="data-table"><thead><tr><th>Account ID</th><th>Issue</th><th>Severity</th></tr></thead><tbody>' + 
+             ''.join([f'<tr><td>{issue["account_id"]}</td><td>{issue["issue"]}</td><td><span class="issue-badge {issue["severity"]}">{issue["severity"].upper()}</span></td></tr>' 
+                     for issue in accounts_issues[:50]]) + '</tbody></table>' if accounts_issues else '<p>✅ No issues found in accounts table</p>'}
+        </div>
+        
+        <!-- Transactions Tab -->
+        <div id="transactions-tab" class="tab-content">
+            <div class="table-summary">
+                <h4>Transactions Analysis</h4>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="number">{stats['total_transactions']}</div>
+                        <div class="label">Total Transactions</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['alert_count']}</div>
+                        <div class="label">Alert Transactions</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len([t for t in transactions_issues if t['severity'] == 'critical'])}</div>
+                        <div class="label">Critical Issues</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len(transactions_issues)}</div>
+                        <div class="label">Total Issues</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>🚨 Transaction Issues ({len(transactions_issues)})</h3>
+            {f'<table class="data-table"><thead><tr><th>Account ID</th><th>Transaction ID</th><th>Issue</th><th>Severity</th></tr></thead><tbody>' + 
+             ''.join([f'<tr><td>{issue["account_id"]}</td><td>{issue.get("transaction_id", "N/A")}</td><td>{issue["issue"]}</td><td><span class="issue-badge {issue["severity"]}">{issue["severity"].upper()}</span></td></tr>' 
+                     for issue in transactions_issues[:50]]) + '</tbody></table>' if transactions_issues else '<p>✅ No issues found in transactions table</p>'}
+        </div>
+        
+        <!-- Wire Transfers Tab -->
+        <div id="wires-tab" class="tab-content">
+            <div class="table-summary">
+                <h4>Wire Transfers Analysis</h4>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="number">{stats['total_wires']}</div>
+                        <div class="label">Total Wire Transfers</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['suspicious_wires']}</div>
+                        <div class="label">Suspicious Wires</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len(wire_transfers_issues)}</div>
+                        <div class="label">Total Issues</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>🚨 Wire Transfer Issues ({len(wire_transfers_issues)})</h3>
+            {f'<table class="data-table"><thead><tr><th>Account ID</th><th>Wire ID</th><th>Issue</th><th>Severity</th></tr></thead><tbody>' + 
+             ''.join([f'<tr><td>{issue["account_id"]}</td><td>{issue.get("wire_id", "N/A")}</td><td>{issue["issue"]}</td><td><span class="issue-badge {issue["severity"]}">{issue["severity"].upper()}</span></td></tr>' 
+                     for issue in wire_transfers_issues[:50]]) + '</tbody></table>' if wire_transfers_issues else '<p>✅ No issues found in wire transfers table</p>'}
+        </div>
+        
+        <!-- Audit Logs Tab -->
+        <div id="logs-tab" class="tab-content">
+            <div class="table-summary">
+                <h4>Audit Logs Analysis</h4>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="number">{stats['total_logs']}</div>
+                        <div class="label">Total Log Entries</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['sar_count']}</div>
+                        <div class="label">SARs Filed</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len(audit_logs_issues)}</div>
+                        <div class="label">Notable Events</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>📋 Audit Log Events ({len(audit_logs_issues)})</h3>
+            {f'<table class="data-table"><thead><tr><th>Account ID</th><th>Event</th><th>Description</th><th>Type</th></tr></thead><tbody>' + 
+             ''.join([f'<tr><td>{issue["account_id"]}</td><td>{issue.get("event", "N/A")}</td><td>{issue["issue"]}</td><td><span class="issue-badge {issue["severity"]}">{issue["severity"].upper()}</span></td></tr>' 
+                     for issue in audit_logs_issues[:50]]) + '</tbody></table>' if audit_logs_issues else '<p>ℹ️ No notable events in audit logs</p>'}
+        </div>
+    </div>
+    
+    <script>
+        function openTab(evt, tabName) {{
+            // Hide all tab contents
+            var tabContents = document.getElementsByClassName("tab-content");
+            for (var i = 0; i < tabContents.length; i++) {{
+                tabContents[i].classList.remove("active");
+            }}
+            
+            // Remove active class from all tabs
+            var tabs = document.getElementsByClassName("tab");
+            for (var i = 0; i < tabs.length; i++) {{
+                tabs[i].classList.remove("active");
+            }}
+            
+            // Show the current tab and add active class
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }}
+    </script>
+    """
+
+    return html
+
+
 def generate_compliance_officer_report(results, stats):
     """Generate Compliance Officer specific report"""
-    html = """
+
+    # Generate role-specific charts
+    charts_html = generate_compliance_charts_html(stats, results)
+
+    html = f"""
     <div class="role-report">
         <h2>🛡️ Compliance Officer Dashboard</h2>
         <p class="role-description">Focus: Regulatory compliance, SAR filing, immediate actions</p>
+        
+        {charts_html}
+        
+        {generate_four_table_tabs(results, stats)}
         
         <div class="priority-alerts">
             <h3>⚠️ Priority Actions Required</h3>
@@ -403,27 +1139,18 @@ def generate_compliance_officer_report(results, stats):
 
 def generate_risk_analyst_report(results, stats):
     """Generate Risk Analyst specific report"""
-    html = """
+
+    # Generate role-specific charts
+    charts_html = generate_risk_analyst_charts_html(stats, results)
+
+    html = f"""
     <div class="role-report">
         <h2>📈 Risk Analyst Dashboard</h2>
         <p class="role-description">Focus: Pattern analysis, risk scoring, predictive modeling</p>
         
-        <div class="risk-distribution">
-            <h3>Risk Distribution</h3>
-            <div class="chart-container">
-                <div class="bar-chart">
-                    <div class="bar high" style="height: """ + str(int(stats['high_risk_count'] / stats['total_accounts'] * 100)) + """px">
-                        <span class="bar-label">HIGH<br>{stats['high_risk_count']}</span>
-                    </div>
-                    <div class="bar medium" style="height: """ + str(int(stats['medium_risk_count'] / stats['total_accounts'] * 100)) + """px">
-                        <span class="bar-label">MEDIUM<br>{stats['medium_risk_count']}</span>
-                    </div>
-                    <div class="bar low" style="height: """ + str(int(stats['low_risk_count'] / stats['total_accounts'] * 100)) + """px">
-                        <span class="bar-label">LOW<br>{stats['low_risk_count']}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+        {charts_html}
+        
+        {generate_four_table_tabs(results, stats)}
         
         <div class="pattern-analysis">
             <h3>🔍 Pattern Analysis</h3>
@@ -497,10 +1224,18 @@ def generate_risk_analyst_report(results, stats):
 
 def generate_regulatory_officer_report(results, stats):
     """Generate Regulatory Officer specific report"""
+
+    # Generate role-specific charts
+    charts_html = generate_regulatory_charts_html(stats, results)
+
     html = f"""
     <div class="role-report">
         <h2>⚖️ Regulatory Officer Dashboard</h2>
         <p class="role-description">Focus: Regulatory compliance, violations, reporting requirements</p>
+        
+        {charts_html}
+        
+        {generate_four_table_tabs(results, stats)}
         
         <div class="regulatory-summary">
             <h3>Regulatory Compliance Summary</h3>
@@ -636,7 +1371,7 @@ def generate_dashboard_html(role, results, stats, data_flow_html, role_report_ht
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AML Dashboard - {role}</title>
+    <title>Accessible ETL Pipeline UI dashboard - {role}</title>
     <style>
         * {{
             margin: 0;
@@ -994,6 +1729,117 @@ def generate_dashboard_html(role, results, stats, data_flow_html, role_report_ht
             margin-bottom: 20px;
         }}
         
+        /* Tab Styles for 4-Table View */
+        .tabs-container {{
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }}
+        
+        .tabs {{
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }}
+        
+        .tab {{
+            padding: 12px 24px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            color: #666;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }}
+        
+        .tab:hover {{
+            color: #667eea;
+        }}
+        
+        .tab.active {{
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }}
+        
+        .tab-content {{
+            display: none;
+        }}
+        
+        .tab-content.active {{
+            display: block;
+            animation: fadeIn 0.3s;
+        }}
+        
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        
+        .table-summary {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }}
+        
+        .table-summary h4 {{
+            color: white;
+            margin-bottom: 10px;
+        }}
+        
+        .summary-stats {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }}
+        
+        .summary-stat {{
+            background: rgba(255,255,255,0.2);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }}
+        
+        .summary-stat .number {{
+            font-size: 24px;
+            font-weight: bold;
+        }}
+        
+        .summary-stat .label {{
+            font-size: 12px;
+            opacity: 0.9;
+        }}
+        
+        .issue-badge {{
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 2px;
+        }}
+        
+        .issue-badge.critical {{
+            background: #ef4444;
+            color: white;
+        }}
+        
+        .issue-badge.warning {{
+            background: #f59e0b;
+            color: white;
+        }}
+        
+        .issue-badge.info {{
+            background: #3b82f6;
+            color: white;
+        }}
+        
         @media print {{
             .container {{
                 display: block;
@@ -1006,8 +1852,8 @@ def generate_dashboard_html(role, results, stats, data_flow_html, role_report_ht
 </head>
 <body>
     <div class="header">
-        <h1>AML Risk Analysis Dashboard - {role}</h1>
-        <div class="subtitle">Generated: {timestamp} | Machine Learning + SHAP Explainability</div>
+        <h1>Accessible ETL Pipeline UI dashboard - {role}</h1>
+        <div class="subtitle">AI-Powered Accessible ETL Pipeline - UI dashboard | Generated: {timestamp} | ML Model + XAI (LIME + SHAP) Explainability</div>
     </div>
     
     <div class="container">
@@ -1022,6 +1868,9 @@ def generate_dashboard_html(role, results, stats, data_flow_html, role_report_ht
 </body>
 </html>
     """
+
+    # Add feedback UI to the dashboard
+    html = add_feedback_to_dashboard(html)
 
     return html
 
@@ -1039,7 +1888,7 @@ def save_dashboard(role, html_content, output_dir):
 
 def main():
     print("\n" + "=" * 80)
-    print("AML COMPREHENSIVE DASHBOARD GENERATOR")
+    print("ACCESSIBLE ETL PIPELINE DASHBOARD GENERATOR")
     print("=" * 80 + "\n")
 
     # Get Supabase key
@@ -1056,11 +1905,11 @@ def main():
     # Fetch all data
     data = fetch_all_data(supabase)
 
-    # Train ML model
-    model, explainer, X, shap_values, account_ids_list = train_model_and_explain(data)
+    # Train ML model with LIME and SHAP
+    model, shap_explainer, lime_explainer, X, shap_values, account_ids_list = train_model_and_explain(data)
 
     # Analyze ALL accounts
-    results = analyze_all_accounts(data, model, X, shap_values, account_ids_list)
+    results = analyze_all_accounts(data, model, lime_explainer, X, shap_values, account_ids_list)
 
     # Calculate statistics
     stats = {
@@ -1084,6 +1933,9 @@ def main():
     output_dir = os.path.join('output', date_str)
     os.makedirs(output_dir, exist_ok=True)
 
+    # Track lineage
+    lineage = get_lineage_tracker()
+
     # Generate data flow HTML (same for all roles)
     data_flow_html = generate_data_flow_html(stats)
 
@@ -1105,6 +1957,9 @@ def main():
         filepath = save_dashboard(role_name, dashboard_html, output_dir)
         generated_files.append(filepath)
         print(f"  ✓ Saved: {filepath}")
+
+        # Track dashboard generation
+        lineage.record_dashboard_generation(role_name, stats['total_accounts'], filepath)
 
     # Print summary
     print("\n" + "=" * 80)

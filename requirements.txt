@@ -1,10 +1,10 @@
 psycopg2-binary==2.9.11
 supabase
-numpy
+numpy==1.26.4
 pandas
-scikit-learn
-shap
+scikit-learn<1.6
+shap<0.46
 flask
 werkzeug
 openai
-gunicorn
+lime

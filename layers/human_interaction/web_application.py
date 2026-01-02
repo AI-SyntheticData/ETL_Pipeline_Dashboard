@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-AML Dashboard Web Application
+Accessible ETL Pipeline UI dashboard - Web Application
 Flask-based web UI with login and role-based access control
 URL: https://accessibleuidashboard-financialdata/
 """
 
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import os
 from datetime import datetime, timedelta
 import secrets
+import json
+
+# Import feedback system
+from layers.human_interaction.feedback_system import FeedbackManager
 
 # Get the directory where this module is located
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +30,9 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable caching for development
+
+# Initialize feedback manager
+feedback_manager = FeedbackManager(feedback_dir=os.path.join(PROJECT_ROOT, 'feedback'))
 
 # User database (in production, use a real database)
 USERS = {
@@ -225,6 +232,112 @@ def profile():
                          login_time=session.get('login_time'))
 
 
+@app.route('/api/feedback', methods=['POST'])
+@login_required
+def submit_feedback():
+    """API endpoint to submit feedback"""
+    try:
+        data = request.get_json()
+
+        feedback = feedback_manager.record_feedback(
+            account_id=data.get('account_id', 'UNKNOWN'),
+            reviewer_email=session.get('user_email'),
+            reviewer_role=session.get('user_role'),
+            decision=data.get('decision'),
+            confidence_adjustment=data.get('confidence_adjustment'),
+            comments=data.get('comments'),
+            action_taken=data.get('action'),
+            risk_override=data.get('riskOverride')
+        )
+
+        # Save feedback to file
+        batch_id = datetime.now().strftime('%Y%m%d')
+        feedback_manager.save_feedback(batch_id)
+
+        return jsonify({
+            'success': True,
+            'message': 'Feedback submitted successfully',
+            'feedback_id': feedback['feedback_id']
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error submitting feedback: {str(e)}'
+        }), 500
+
+
+@app.route('/api/feedback/<account_id>', methods=['GET'])
+@login_required
+def get_feedback(account_id):
+    """API endpoint to retrieve feedback for an account"""
+    try:
+        feedback = feedback_manager.get_feedback_for_account(account_id)
+        return jsonify({
+            'success': True,
+            'feedback': feedback
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving feedback: {str(e)}'
+        }), 500
+
+
+@app.route('/api/feedback/summary', methods=['GET'])
+@login_required
+@role_required(['Administrator', 'Compliance Officer'])
+def get_feedback_summary():
+    """API endpoint to get feedback summary (admin/compliance only)"""
+    try:
+        summary = feedback_manager.get_feedback_summary()
+        return jsonify({
+            'success': True,
+            'summary': summary
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving summary: {str(e)}'
+        }), 500
+
+
+@app.route('/api/feedback/my-role', methods=['GET'])
+@login_required
+def get_my_role_feedback():
+    """API endpoint to get feedback for current user's role"""
+    try:
+        user_role = session.get('user_role')
+
+        # Load today's feedback file
+        batch_id = datetime.now().strftime('%Y%m%d')
+        feedback_file = os.path.join(PROJECT_ROOT, 'feedback', f'feedback_{batch_id}.json')
+
+        if not os.path.exists(feedback_file):
+            return jsonify({
+                'success': True,
+                'feedback': []
+            }), 200
+
+        # Read and filter by role
+        with open(feedback_file, 'r') as f:
+            all_feedback = json.load(f)
+
+        # Filter feedback for current user's role
+        role_feedback = [fb for fb in all_feedback if fb.get('reviewer', {}).get('role') == user_role]
+
+        return jsonify({
+            'success': True,
+            'feedback': role_feedback,
+            'role': user_role
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving role feedback: {str(e)}'
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """404 error handler"""
@@ -247,8 +360,9 @@ if __name__ == '__main__':
     print("\nStarting server...")
 
     # Get host and port from environment or use defaults
-    host = os.environ.get('HOST', '127.0.0.1')
-    port = int(os.environ.get('PORT', 5000))
+    # Use 0.0.0.0 to work in Codespaces, containers, and other environments
+    host = os.environ.get('HOST', '0.0.0.0')
+    port = int(os.environ.get('PORT', 8080))  # Changed from 5000 to 8080 to avoid AirPlay conflict
     debug = os.environ.get('FLASK_DEBUG', 'true').lower() == 'true'
 
     print("\nAccess the dashboard at:")

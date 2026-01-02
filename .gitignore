@@ -48,6 +48,27 @@ instance/
 *.sqlite
 *.sqlite3
 
+# Generated Files
+output/
+raw_data/
+lineage/
+feedback/
+*.pyc
+*.html
+
+# Documentation (keep only README and QUICKSTART)
+FLOW_VERIFICATION.md
+SETUP_CHECKLIST.md
+test_complete_flow.py
+
+# Deployment (Codespaces only)
+Dockerfile
+docker-compose.yml
+render.yaml
+Procfile
+.devcontainer/
+.github/
+
 # Logs
 *.log
 logs/

@@ -1,0 +1,98 @@
+{
+  "trained_at": "2026-01-02T15:40:21.706276",
+  "n_samples": 100,
+  "n_features": 14,
+  "feature_names": [
+    "initial_deposit",
+    "risk_score",
+    "is_pep",
+    "is_sanctioned",
+    "kyc_incomplete",
+    "has_anomaly",
+    "total_transactions",
+    "suspicious_transactions",
+    "avg_transaction_amount",
+    "max_transaction_amount",
+    "total_wires",
+    "suspicious_wires",
+    "avg_wire_amount",
+    "max_wire_amount"
+  ],
+  "n_estimators": 100,
+  "max_depth": 10,
+  "test_size": 0.2,
+  "metrics": {
+    "train": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "roc_auc": 1.0
+    },
+    "test": {
+      "accuracy": 0.95,
+      "precision": 0.875,
+      "recall": 1.0,
+      "f1_score": 0.9333333333333333,
+      "roc_auc": 1.0
+    },
+    "feature_importance": [
+      {
+        "feature": "risk_score",
+        "importance": 0.26938480682481347
+      },
+      {
+        "feature": "initial_deposit",
+        "importance": 0.14364615748382728
+      },
+      {
+        "feature": "avg_wire_amount",
+        "importance": 0.11825543766831988
+      },
+      {
+        "feature": "max_wire_amount",
+        "importance": 0.09811142853260915
+      },
+      {
+        "feature": "avg_transaction_amount",
+        "importance": 0.09627379980762693
+      },
+      {
+        "feature": "suspicious_transactions",
+        "importance": 0.09620892186337819
+      },
+      {
+        "feature": "max_transaction_amount",
+        "importance": 0.09176362576432082
+      },
+      {
+        "feature": "suspicious_wires",
+        "importance": 0.05750869631955248
+      },
+      {
+        "feature": "total_transactions",
+        "importance": 0.01815216898723302
+      },
+      {
+        "feature": "has_anomaly",
+        "importance": 0.008016691704374523
+      },
+      {
+        "feature": "total_wires",
+        "importance": 0.0013739172178572783
+      },
+      {
+        "feature": "is_pep",
+        "importance": 0.0013043478260869594
+      },
+      {
+        "feature": "is_sanctioned",
+        "importance": 0.0
+      },
+      {
+        "feature": "kyc_incomplete",
+        "importance": 0.0
+      }
+    ]
+  }
+}
