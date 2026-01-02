@@ -700,11 +700,6 @@ def generate_regulatory_charts_html(stats, results):
     return charts_html
 
 
-def generate_charts_html(stats, results):
-    """Legacy function - no longer used, kept for compatibility"""
-    return ""
-
-
 def generate_data_flow_html(stats):
     """Generate data flow visualization HTML"""
 
@@ -784,6 +779,235 @@ def generate_data_flow_html(stats):
     """
 
 
+def generate_four_table_tabs(results, stats):
+    """Generate 4-table tabs view with explicit issues for each table"""
+
+    # Analyze issues per table
+    accounts_issues = []
+    transactions_issues = []
+    wire_transfers_issues = []
+    audit_logs_issues = []
+
+    for result in results:
+        account = result['account']
+        account_id = account['account_id']
+
+        # Account issues
+        if result['risk_level'] == 'HIGH':
+            accounts_issues.append({
+                'account_id': account_id,
+                'issue': f"High Risk Score: {account.get('risk_score', 0)}",
+                'severity': 'critical'
+            })
+        if account.get('is_sanctioned'):
+            accounts_issues.append({
+                'account_id': account_id,
+                'issue': 'Sanctioned Entity',
+                'severity': 'critical'
+            })
+        if account.get('is_pep'):
+            accounts_issues.append({
+                'account_id': account_id,
+                'issue': 'PEP Account',
+                'severity': 'warning'
+            })
+        if account.get('kyc_status') == 'INCOMPLETE':
+            accounts_issues.append({
+                'account_id': account_id,
+                'issue': 'Incomplete KYC',
+                'severity': 'warning'
+            })
+
+        # Transaction issues
+        for txn in result['transactions']:
+            if txn.get('alert_generated'):
+                transactions_issues.append({
+                    'account_id': account_id,
+                    'transaction_id': txn.get('transaction_id'),
+                    'issue': f"{txn.get('anomaly_type', 'Suspicious Activity')} - ${txn.get('amount', 0):,.2f}",
+                    'severity': 'critical' if float(txn.get('amount', 0)) > 10000 else 'warning'
+                })
+
+        # Wire transfer issues
+        for wire in result['wire_transfers']:
+            if wire.get('is_suspicious'):
+                wire_transfers_issues.append({
+                    'account_id': account_id,
+                    'wire_id': wire.get('wire_id'),
+                    'issue': f"Suspicious Wire to {wire.get('destination_country', 'Unknown')} - ${wire.get('amount', 0):,.2f}",
+                    'severity': 'critical'
+                })
+
+        # Audit log issues
+        for log in result['audit_logs']:
+            if log.get('event_type') == 'SAR_FILED':
+                audit_logs_issues.append({
+                    'account_id': account_id,
+                    'event': 'SAR Filed',
+                    'issue': f"SAR Filed: {log.get('description', 'Suspicious Activity')}",
+                    'severity': 'info'
+                })
+
+    html = f"""
+    <div class="tabs-container">
+        <h2>📊 Data Analysis by Table</h2>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="openTab(event, 'accounts-tab')">
+                👤 Accounts ({len(results)})
+            </button>
+            <button class="tab" onclick="openTab(event, 'transactions-tab')">
+                💰 Transactions ({stats['total_transactions']})
+            </button>
+            <button class="tab" onclick="openTab(event, 'wires-tab')">
+                🌐 Wire Transfers ({stats['total_wires']})
+            </button>
+            <button class="tab" onclick="openTab(event, 'logs-tab')">
+                📋 Audit Logs ({stats['total_logs']})
+            </button>
+        </div>
+        
+        <!-- Accounts Tab -->
+        <div id="accounts-tab" class="tab-content active">
+            <div class="table-summary">
+                <h4>Account Openings Analysis</h4>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="number">{len(results)}</div>
+                        <div class="label">Total Accounts</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['high_risk_count']}</div>
+                        <div class="label">High Risk</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['pep_count']}</div>
+                        <div class="label">PEP Accounts</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['sanctioned_count']}</div>
+                        <div class="label">Sanctioned</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len(accounts_issues)}</div>
+                        <div class="label">Total Issues</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>🚨 Account Issues ({len(accounts_issues)})</h3>
+            {f'<table class="data-table"><thead><tr><th>Account ID</th><th>Issue</th><th>Severity</th></tr></thead><tbody>' + 
+             ''.join([f'<tr><td>{issue["account_id"]}</td><td>{issue["issue"]}</td><td><span class="issue-badge {issue["severity"]}">{issue["severity"].upper()}</span></td></tr>' 
+                     for issue in accounts_issues[:50]]) + '</tbody></table>' if accounts_issues else '<p>✅ No issues found in accounts table</p>'}
+        </div>
+        
+        <!-- Transactions Tab -->
+        <div id="transactions-tab" class="tab-content">
+            <div class="table-summary">
+                <h4>Transactions Analysis</h4>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="number">{stats['total_transactions']}</div>
+                        <div class="label">Total Transactions</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['alert_count']}</div>
+                        <div class="label">Alert Transactions</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len([t for t in transactions_issues if t['severity'] == 'critical'])}</div>
+                        <div class="label">Critical Issues</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len(transactions_issues)}</div>
+                        <div class="label">Total Issues</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>🚨 Transaction Issues ({len(transactions_issues)})</h3>
+            {f'<table class="data-table"><thead><tr><th>Account ID</th><th>Transaction ID</th><th>Issue</th><th>Severity</th></tr></thead><tbody>' + 
+             ''.join([f'<tr><td>{issue["account_id"]}</td><td>{issue.get("transaction_id", "N/A")}</td><td>{issue["issue"]}</td><td><span class="issue-badge {issue["severity"]}">{issue["severity"].upper()}</span></td></tr>' 
+                     for issue in transactions_issues[:50]]) + '</tbody></table>' if transactions_issues else '<p>✅ No issues found in transactions table</p>'}
+        </div>
+        
+        <!-- Wire Transfers Tab -->
+        <div id="wires-tab" class="tab-content">
+            <div class="table-summary">
+                <h4>Wire Transfers Analysis</h4>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="number">{stats['total_wires']}</div>
+                        <div class="label">Total Wire Transfers</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['suspicious_wires']}</div>
+                        <div class="label">Suspicious Wires</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len(wire_transfers_issues)}</div>
+                        <div class="label">Total Issues</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>🚨 Wire Transfer Issues ({len(wire_transfers_issues)})</h3>
+            {f'<table class="data-table"><thead><tr><th>Account ID</th><th>Wire ID</th><th>Issue</th><th>Severity</th></tr></thead><tbody>' + 
+             ''.join([f'<tr><td>{issue["account_id"]}</td><td>{issue.get("wire_id", "N/A")}</td><td>{issue["issue"]}</td><td><span class="issue-badge {issue["severity"]}">{issue["severity"].upper()}</span></td></tr>' 
+                     for issue in wire_transfers_issues[:50]]) + '</tbody></table>' if wire_transfers_issues else '<p>✅ No issues found in wire transfers table</p>'}
+        </div>
+        
+        <!-- Audit Logs Tab -->
+        <div id="logs-tab" class="tab-content">
+            <div class="table-summary">
+                <h4>Audit Logs Analysis</h4>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="number">{stats['total_logs']}</div>
+                        <div class="label">Total Log Entries</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{stats['sar_count']}</div>
+                        <div class="label">SARs Filed</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="number">{len(audit_logs_issues)}</div>
+                        <div class="label">Notable Events</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>📋 Audit Log Events ({len(audit_logs_issues)})</h3>
+            {f'<table class="data-table"><thead><tr><th>Account ID</th><th>Event</th><th>Description</th><th>Type</th></tr></thead><tbody>' + 
+             ''.join([f'<tr><td>{issue["account_id"]}</td><td>{issue.get("event", "N/A")}</td><td>{issue["issue"]}</td><td><span class="issue-badge {issue["severity"]}">{issue["severity"].upper()}</span></td></tr>' 
+                     for issue in audit_logs_issues[:50]]) + '</tbody></table>' if audit_logs_issues else '<p>ℹ️ No notable events in audit logs</p>'}
+        </div>
+    </div>
+    
+    <script>
+        function openTab(evt, tabName) {{
+            // Hide all tab contents
+            var tabContents = document.getElementsByClassName("tab-content");
+            for (var i = 0; i < tabContents.length; i++) {{
+                tabContents[i].classList.remove("active");
+            }}
+            
+            // Remove active class from all tabs
+            var tabs = document.getElementsByClassName("tab");
+            for (var i = 0; i < tabs.length; i++) {{
+                tabs[i].classList.remove("active");
+            }}
+            
+            // Show the current tab and add active class
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }}
+    </script>
+    """
+
+    return html
+
+
 def generate_compliance_officer_report(results, stats):
     """Generate Compliance Officer specific report"""
 
@@ -796,6 +1020,8 @@ def generate_compliance_officer_report(results, stats):
         <p class="role-description">Focus: Regulatory compliance, SAR filing, immediate actions</p>
         
         {charts_html}
+        
+        {generate_four_table_tabs(results, stats)}
         
         <div class="priority-alerts">
             <h3>⚠️ Priority Actions Required</h3>
@@ -924,6 +1150,8 @@ def generate_risk_analyst_report(results, stats):
         
         {charts_html}
         
+        {generate_four_table_tabs(results, stats)}
+        
         <div class="pattern-analysis">
             <h3>🔍 Pattern Analysis</h3>
     """
@@ -1006,6 +1234,8 @@ def generate_regulatory_officer_report(results, stats):
         <p class="role-description">Focus: Regulatory compliance, violations, reporting requirements</p>
         
         {charts_html}
+        
+        {generate_four_table_tabs(results, stats)}
         
         <div class="regulatory-summary">
             <h3>Regulatory Compliance Summary</h3>
@@ -1497,6 +1727,117 @@ def generate_dashboard_html(role, results, stats, data_flow_html, role_report_ht
         h3 {{
             color: #667eea;
             margin-bottom: 20px;
+        }}
+        
+        /* Tab Styles for 4-Table View */
+        .tabs-container {{
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }}
+        
+        .tabs {{
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }}
+        
+        .tab {{
+            padding: 12px 24px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            color: #666;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }}
+        
+        .tab:hover {{
+            color: #667eea;
+        }}
+        
+        .tab.active {{
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }}
+        
+        .tab-content {{
+            display: none;
+        }}
+        
+        .tab-content.active {{
+            display: block;
+            animation: fadeIn 0.3s;
+        }}
+        
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        
+        .table-summary {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }}
+        
+        .table-summary h4 {{
+            color: white;
+            margin-bottom: 10px;
+        }}
+        
+        .summary-stats {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }}
+        
+        .summary-stat {{
+            background: rgba(255,255,255,0.2);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }}
+        
+        .summary-stat .number {{
+            font-size: 24px;
+            font-weight: bold;
+        }}
+        
+        .summary-stat .label {{
+            font-size: 12px;
+            opacity: 0.9;
+        }}
+        
+        .issue-badge {{
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 2px;
+        }}
+        
+        .issue-badge.critical {{
+            background: #ef4444;
+            color: white;
+        }}
+        
+        .issue-badge.warning {{
+            background: #f59e0b;
+            color: white;
+        }}
+        
+        .issue-badge.info {{
+            background: #3b82f6;
+            color: white;
         }}
         
         @media print {{

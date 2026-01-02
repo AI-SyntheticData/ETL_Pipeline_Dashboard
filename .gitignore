@@ -54,6 +54,7 @@ raw_data/
 lineage/
 feedback/
 *.pyc
+*.html
 
 # Documentation (keep only README and QUICKSTART)
 FLOW_VERIFICATION.md
