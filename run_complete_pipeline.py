@@ -135,7 +135,10 @@ def main():
 
     print("\n🎨 Auto-generating comprehensive dashboards...")
 
+    # Pass Supabase key to dashboard builder if available
     cmd = ['python3', '-m', 'layers.access.dashboard_builder']
+    if use_database:
+        cmd.append(supabase_key)
 
     if not run_command(cmd, "Generating dashboards..."):
         print("\n✗ Failed to generate dashboards")

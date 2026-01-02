@@ -11,6 +11,10 @@ from datetime import datetime, timedelta
 import json
 import random
 
+# Import new components
+from layers.data_pipeline.data_validator import DataValidator
+from layers.data_pipeline.data_lineage import get_lineage_tracker
+
 # Supabase Configuration
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://pcpurhkthawyipfibehn.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
@@ -527,20 +531,51 @@ def main():
     if not supabase_key and len(sys.argv) > 2:
         supabase_key = sys.argv[2]
 
-    if not supabase_key:
+    if not supabase_key or supabase_key == 'skip_db_loading':
         print("⚠ No Supabase key provided. Data will be processed but not loaded to database.")
         print("  Set SUPABASE_KEY environment variable or provide as argument.")
         load_to_db = False
     else:
         load_to_db = True
 
+    # Initialize lineage tracker
+    lineage = get_lineage_tracker()
+    batch_id = datetime.now().strftime('%Y%m%d_%H%M%S')
+    lineage.start_pipeline(batch_id)
+
     # Step 1: Extract - Load raw data
     print("STEP 1: EXTRACT")
     raw_data = load_raw_data(raw_data_file)
+    lineage.record_extraction(raw_data_file, len(raw_data), {'format': 'JSON'})
+
+    # Step 1.5: Validate - Validate raw data
+    print("\nSTEP 1.5: VALIDATE")
+    validator = DataValidator()
+    validation_report = validator.validate_dataset(raw_data)
+    lineage.record_validation(
+        validation_report['valid_accounts'],
+        validation_report['invalid_accounts'],
+        validation_report['total_errors'],
+        validation_report['total_warnings']
+    )
+
+    # Stop if validation failed critically
+    if validation_report['invalid_accounts'] > len(raw_data) * 0.5:  # More than 50% invalid
+        print("\n❌ CRITICAL: More than 50% of data failed validation!")
+        lineage.end_pipeline(success=False, error_message="Data validation failed")
+        lineage.save_lineage()
+        sys.exit(1)
 
     # Step 2: Transform - Apply rules and detect issues
     print("\nSTEP 2: TRANSFORM")
     processed_data = process_raw_data(raw_data)
+    lineage.record_transformation('aml_risk_detection', len(raw_data), len(processed_data), {
+        'rules_applied': ['KYC', 'structuring', 'layering', 'smurfing', 'unusual_timing', 'high_value']
+    })
+
+    # Record each rule application
+    total_alerts = sum(len(a.get('transaction_alerts', [])) for a in processed_data)
+    lineage.record_rule_application('AML_Detection_Rules', len(processed_data), total_alerts)
 
     # Transform to database format
     print("\nTransforming to database schema...")
@@ -551,11 +586,22 @@ def main():
     print(f"  - {len(transformed_data['wire_transfers'])} wire transfers")
     print(f"  - {len(transformed_data['audit_logs'])} audit logs")
 
+    lineage.record_transformation('database_schema_mapping', len(processed_data),
+                                  len(transformed_data['accounts']), {
+                                      'total_transactions': len(transformed_data['transactions']),
+                                      'total_wires': len(transformed_data['wire_transfers']),
+                                      'total_logs': len(transformed_data['audit_logs'])
+                                  })
+
     # Step 3: Load - Insert into database
     if load_to_db:
         print("\nSTEP 3: LOAD")
         supabase = create_client(SUPABASE_URL, supabase_key)
         load_to_database(supabase, transformed_data)
+        lineage.record_load('Supabase', len(transformed_data['accounts']), 'account_openings')
+        lineage.record_load('Supabase', len(transformed_data['transactions']), 'transactions')
+        lineage.record_load('Supabase', len(transformed_data['wire_transfers']), 'wire_transfers')
+        lineage.record_load('Supabase', len(transformed_data['audit_logs']), 'audit_logs')
 
     # Print summary
     print("\n" + "=" * 80)
@@ -579,6 +625,11 @@ def main():
     print(f"\nAlerts Generated:")
     print(f"  Total alerts:        {total_alerts}")
     print(f"  Critical alerts:     {critical_alerts}")
+
+    # End pipeline tracking
+    lineage.end_pipeline(success=True)
+    lineage.print_lineage()
+    lineage.save_lineage()
 
     if load_to_db:
         print(f"\nNext step: Analyze data")
