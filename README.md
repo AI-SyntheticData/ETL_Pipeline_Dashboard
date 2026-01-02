@@ -65,44 +65,7 @@ A comprehensive ETL pipeline system for financial data processing with ML-powere
 
 ## 🏗 Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ETL PIPELINE FLOW                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  Stage 1: INGEST                                                 │
-│  └─> Raw Data Generation (100+ accounts, 2500+ transactions)    │
-│      └─> AML Pattern Detection                                   │
-│                                                                   │
-│  Stage 2: VALIDATE & TRANSFORM                                   │
-│  └─> Data Validation                                             │
-│  └─> Schema Transformation                                       │
-│  └─> Quality Checks                                              │
-│                                                                   │
-│  Stage 3: LOAD                                                   │
-│  └─> Database Loading (Supabase)                                │
-│  └─> 4 Tables: accounts, transactions, wire_transfers, logs     │
-│                                                                   │
-│  Stage 4: ML MODEL                                               │
-│  └─> Feature Engineering (14+ features)                         │
-│  └─> RandomForest Training                                       │
-│  └─> SHAP & LIME Explainability                                 │
-│  └─> Model Evaluation & Persistence                             │
-│                                                                   │
-│  Stage 5: DASHBOARD GENERATION                                   │
-│  └─> Role-Specific Analysis                                      │
-│  └─> Chart Generation (unique per role)                         │
-│  └─> 4-Table Tabs with Issues                                   │
-│  └─> HTML Dashboard Export                                       │
-│                                                                   │
-│  Stage 6: WEB APPLICATION                                        │
-│  └─> Flask Web Server                                            │
-│  └─> User Authentication                                         │
-│  └─> Role-Based Access                                           │
-│  └─> Interactive Feedback                                        │
-│                                                                   │
-└─────────────────────────────────────────────────────────────────┘
-```
+<img width="900" height="1136" alt="image" src="https://github.com/user-attachments/assets/befdb602-ba96-49be-8e7e-fb1e9a066689" />
 
 ---
 
