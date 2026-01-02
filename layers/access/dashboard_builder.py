@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AML Comprehensive Dashboard Generator
+Accessible ETL Pipeline Dashboard Generator
 Analyzes ALL accounts and generates role-based HTML dashboards with 2-panel layout:
 - Left Panel: Data Flow Visualization
 - Right Panel: Detailed Analysis
@@ -1141,7 +1141,7 @@ def generate_dashboard_html(role, results, stats, data_flow_html, role_report_ht
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AML Dashboard - {role}</title>
+    <title>Accessible ETL Pipeline UI dashboard - {role}</title>
     <style>
         * {{
             margin: 0;
@@ -1511,8 +1511,8 @@ def generate_dashboard_html(role, results, stats, data_flow_html, role_report_ht
 </head>
 <body>
     <div class="header">
-        <h1>AML Risk Analysis Dashboard - {role}</h1>
-        <div class="subtitle">Generated: {timestamp} | ML Model + XAI (LIME + SHAP) Explainability</div>
+        <h1>Accessible ETL Pipeline UI dashboard - {role}</h1>
+        <div class="subtitle">AI-Powered Accessible ETL Pipeline - UI dashboard | Generated: {timestamp} | ML Model + XAI (LIME + SHAP) Explainability</div>
     </div>
     
     <div class="container">
@@ -1547,7 +1547,7 @@ def save_dashboard(role, html_content, output_dir):
 
 def main():
     print("\n" + "=" * 80)
-    print("AML COMPREHENSIVE DASHBOARD GENERATOR")
+    print("ACCESSIBLE ETL PIPELINE DASHBOARD GENERATOR")
     print("=" * 80 + "\n")
 
     # Get Supabase key

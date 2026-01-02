@@ -49,10 +49,27 @@ class FeedbackManager:
         filename = f"feedback_{batch_id}.json"
         filepath = os.path.join(self.feedback_dir, filename)
 
+        # Load existing feedback if file exists
+        existing_feedback = []
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    existing_feedback = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                existing_feedback = []
+
+        # Merge existing with new feedback
+        all_feedback = existing_feedback + self.feedback_records
+
+        # Save all feedback
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(self.feedback_records, f, indent=2)
+            json.dump(all_feedback, f, indent=2)
 
         print(f"✓ Feedback saved to: {filepath}")
+
+        # Clear the current records since they're now saved
+        self.feedback_records = []
+
         return filepath
 
     def load_feedback(self, batch_id):
@@ -222,50 +239,102 @@ def add_feedback_to_dashboard(dashboard_html):
     </div>
     
     <script>
+        // Get current user role from page title or meta tag
+        function getCurrentUserRole() {
+            // Extract role from dashboard title (e.g., "Accessible ETL Pipeline UI dashboard - Compliance Officer")
+            const title = document.title;
+            if (title.includes('Compliance Officer')) return 'Compliance Officer';
+            if (title.includes('Risk Analyst')) return 'Risk Analyst';
+            if (title.includes('Regulatory Officer')) return 'Regulatory Officer';
+            if (title.includes('Administrator')) return 'Administrator';
+            return 'Unknown';
+        }
+        
+        // Get role-specific localStorage key
+        function getFeedbackStorageKey() {
+            const role = getCurrentUserRole();
+            return `feedbackHistory_${role.replace(/\s+/g, '_')}`;
+        }
+        
         // Feedback form submission handler
-        document.getElementById('feedbackForm').addEventListener('submit', function(e) {
+        document.getElementById('feedbackForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
+            const currentRole = getCurrentUserRole();
             const formData = {
+                account_id: 'DASHBOARD_VIEW',  // Could be extracted from page context
                 decision: document.getElementById('decision').value,
                 action: document.getElementById('action').value,
                 riskOverride: document.getElementById('riskOverride').value,
-                comments: document.getElementById('comments').value,
-                timestamp: new Date().toISOString(),
-                reviewer: 'current_user'  // Would come from session
+                comments: document.getElementById('comments').value
             };
             
-            // Save to localStorage (in production, would POST to backend)
-            let feedbackHistory = JSON.parse(localStorage.getItem('feedbackHistory') || '[]');
-            feedbackHistory.push(formData);
-            localStorage.setItem('feedbackHistory', JSON.stringify(feedbackHistory));
-            
-            // Show success message
-            alert('✅ Feedback submitted successfully!');
-            
-            // Reset form
-            this.reset();
-            
-            // Reload feedback history
-            loadFeedbackHistory();
+            try {
+                // Submit to backend API
+                const response = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Save to role-specific localStorage for display
+                    const storageKey = getFeedbackStorageKey();
+                    let feedbackHistory = JSON.parse(localStorage.getItem(storageKey) || '[]');
+                    feedbackHistory.push({
+                        ...formData,
+                        timestamp: new Date().toISOString(),
+                        feedback_id: result.feedback_id,
+                        role: currentRole
+                    });
+                    localStorage.setItem(storageKey, JSON.stringify(feedbackHistory));
+                    
+                    // Show success message
+                    alert('✅ Feedback submitted successfully!\\nFeedback ID: ' + result.feedback_id + '\\nRole: ' + currentRole);
+                    
+                    // Reset form
+                    this.reset();
+                    
+                    // Reload feedback history
+                    loadFeedbackHistory();
+                } else {
+                    alert('❌ Error: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert('❌ Failed to submit feedback. Please try again.');
+            }
         });
         
-        // Load and display feedback history
+        // Load and display feedback history (role-specific)
         function loadFeedbackHistory() {
-            const feedbackHistory = JSON.parse(localStorage.getItem('feedbackHistory') || '[]');
+            const storageKey = getFeedbackStorageKey();
+            const currentRole = getCurrentUserRole();
+            const feedbackHistory = JSON.parse(localStorage.getItem(storageKey) || '[]');
             const historyDiv = document.getElementById('feedbackHistory');
             const listDiv = document.getElementById('feedbackList');
             
             if (feedbackHistory.length > 0) {
                 historyDiv.style.display = 'block';
-                listDiv.innerHTML = feedbackHistory.map((fb, idx) => `
+                listDiv.innerHTML = `
+                    <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; margin-bottom: 10px;">
+                        <strong>Showing feedback for: ${currentRole}</strong>
+                    </div>
+                ` + feedbackHistory.map((fb, idx) => `
                     <div class="feedback-item">
                         <strong>${fb.decision}</strong> - ${new Date(fb.timestamp).toLocaleString()}
                         ${fb.action ? `<br>Action: ${fb.action}` : ''}
                         ${fb.riskOverride ? `<br>Risk Override: ${fb.riskOverride}` : ''}
                         ${fb.comments ? `<br>Comments: ${fb.comments}` : ''}
+                        ${fb.feedback_id ? `<br><small>ID: ${fb.feedback_id}</small>` : ''}
                     </div>
                 `).reverse().join('');
+            } else {
+                historyDiv.style.display = 'none';
             }
         }
         

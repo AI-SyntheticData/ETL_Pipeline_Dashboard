@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AML Dashboard Web Application
+Accessible ETL Pipeline UI dashboard - Web Application
 Flask-based web UI with login and role-based access control
 URL: https://accessibleuidashboard-financialdata/
 """
@@ -299,6 +299,42 @@ def get_feedback_summary():
         return jsonify({
             'success': False,
             'message': f'Error retrieving summary: {str(e)}'
+        }), 500
+
+
+@app.route('/api/feedback/my-role', methods=['GET'])
+@login_required
+def get_my_role_feedback():
+    """API endpoint to get feedback for current user's role"""
+    try:
+        user_role = session.get('user_role')
+
+        # Load today's feedback file
+        batch_id = datetime.now().strftime('%Y%m%d')
+        feedback_file = os.path.join(PROJECT_ROOT, 'feedback', f'feedback_{batch_id}.json')
+
+        if not os.path.exists(feedback_file):
+            return jsonify({
+                'success': True,
+                'feedback': []
+            }), 200
+
+        # Read and filter by role
+        with open(feedback_file, 'r') as f:
+            all_feedback = json.load(f)
+
+        # Filter feedback for current user's role
+        role_feedback = [fb for fb in all_feedback if fb.get('reviewer', {}).get('role') == user_role]
+
+        return jsonify({
+            'success': True,
+            'feedback': role_feedback,
+            'role': user_role
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving role feedback: {str(e)}'
         }), 500
 
 

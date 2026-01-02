@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AML Dashboard Web Application - Quick Start
-Runs the complete pipeline, then starts the Flask web server for the role-based dashboard UI
+Accessible ETL Pipeline UI dashboard - Quick Start
+Launches the web application with auto-port detection
 """
 
 import subprocess
