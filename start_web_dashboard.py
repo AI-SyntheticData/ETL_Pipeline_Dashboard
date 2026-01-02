@@ -130,7 +130,7 @@ def main():
 
     # Check if running in Codespaces or container
     if os.environ.get('CODESPACES') or os.environ.get('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN'):
-        print("  • Port 5000 will be automatically forwarded in Codespaces")
+        print("  • Port 8080 will be automatically forwarded in Codespaces")
 
     print("\nFor production deployment with custom domain:")
     print("  • Configure DNS: accessibleuidashboard-financialdata → your_server_ip")
