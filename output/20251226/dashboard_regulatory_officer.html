@@ -1,0 +1,613 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AML Dashboard - Regulatory Officer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        
+        .header .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .container {
+            display: flex;
+            min-height: calc(100vh - 80px);
+        }
+        
+        .left-panel {
+            width: 35%;
+            background: white;
+            padding: 30px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            overflow-y: auto;
+        }
+        
+        .right-panel {
+            width: 65%;
+            padding: 30px;
+            overflow-y: auto;
+        }
+        
+        .data-flow h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+        
+        .flow-diagram {
+            margin: 30px 0;
+        }
+        
+        .flow-node {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            text-align: center;
+        }
+        
+        .flow-node.source { border-color: #4CAF50; background: #e8f5e9; }
+        .flow-node.process { border-color: #2196F3; background: #e3f2fd; }
+        .flow-node.metrics { border-color: #FF9800; background: #fff3e0; }
+        .flow-node.output { border-color: #9C27B0; background: #f3e5f5; }
+        
+        .flow-node h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .flow-node .stat {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        .flow-node .stat.high { color: #d32f2f; }
+        .flow-node .stat.medium { color: #f57c00; }
+        .flow-node .stat.low { color: #388e3c; }
+        
+        .flow-arrow {
+            text-align: center;
+            font-size: 30px;
+            color: #999;
+            margin: 10px 0;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .metric .label {
+            color: #666;
+        }
+        
+        .metric .value {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .data-summary {
+            margin-top: 30px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .data-summary h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+        
+        .data-summary ul {
+            list-style: none;
+        }
+        
+        .data-summary li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .role-report h2 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        
+        .role-description {
+            color: #666;
+            font-style: italic;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+        }
+        
+        .priority-alerts {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .priority-alerts h3 {
+            color: #d32f2f;
+            margin-bottom: 20px;
+        }
+        
+        .alert-item {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        
+        .alert-item.critical {
+            border-color: #d32f2f;
+            background: #ffebee;
+        }
+        
+        .alert-item h4 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 5px 5px 5px 0;
+        }
+        
+        .badge.red { background: #d32f2f; color: white; }
+        .badge.orange { background: #f57c00; color: white; }
+        .badge.green { background: #388e3c; color: white; }
+        .badge.yellow { background: #fbc02d; color: #333; }
+        .badge.high { background: #d32f2f; color: white; }
+        .badge.medium { background: #f57c00; color: white; }
+        .badge.low { background: #388e3c; color: white; }
+        .badge.critical { background: #b71c1c; color: white; }
+        
+        .flag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            font-size: 11px;
+            margin: 3px;
+        }
+        
+        .action-required {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+        }
+        
+        .action-required ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .action-required li {
+            margin: 5px 0;
+        }
+        
+        .stats-grid, .compliance-grid, .pattern-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .stat-box, .compliance-box, .pattern-box {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .stat-value, .pattern-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+        
+        .stat-label, .pattern-desc {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .data-table {
+            width: 100%;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin: 20px 0;
+        }
+        
+        .data-table thead {
+            background: #667eea;
+            color: white;
+        }
+        
+        .data-table th, .data-table td {
+            padding: 12px 15px;
+            text-align: left;
+        }
+        
+        .data-table tbody tr {
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .data-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .data-table tbody tr.high {
+            background: #ffebee;
+        }
+        
+        .data-table tbody tr.medium {
+            background: #fff3e0;
+        }
+        
+        .data-table tbody tr.low {
+            background: #e8f5e9;
+        }
+        
+        .bar-chart {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            height: 200px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+        }
+        
+        .bar {
+            width: 80px;
+            background: #667eea;
+            border-radius: 5px 5px 0 0;
+            position: relative;
+            min-height: 30px;
+        }
+        
+        .bar.high { background: #d32f2f; }
+        .bar.medium { background: #f57c00; }
+        .bar.low { background: #388e3c; }
+        
+        .bar-label {
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .no-critical, .no-violations {
+            padding: 20px;
+            background: #e8f5e9;
+            color: #388e3c;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .compliance-box h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .all-accounts, .risk-scoring, .violations-section, .reporting-requirements {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        @media print {
+            .container {
+                display: block;
+            }
+            .left-panel, .right-panel {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>AML Risk Analysis Dashboard - Regulatory Officer</h1>
+        <div class="subtitle">Generated: 2025-12-26 22:10:15 | Machine Learning + SHAP Explainability</div>
+    </div>
+    
+    <div class="container">
+        <div class="left-panel">
+            
+    <div class="data-flow">
+        <h2>Data Flow Overview</h2>
+        
+        <div class="flow-diagram">
+            <div class="flow-node source">
+                <h3>Data Sources</h3>
+                <div class="stat">Total Accounts: 100</div>
+            </div>
+            
+            <div class="flow-arrow">↓</div>
+            
+            <div class="flow-node process">
+                <h3>Risk Classification</h3>
+                <div class="stat high">High Risk: 31</div>
+                <div class="stat medium">Medium Risk: 0</div>
+                <div class="stat low">Low Risk: 69</div>
+            </div>
+            
+            <div class="flow-arrow">↓</div>
+            
+            <div class="flow-node metrics">
+                <h3>Key Metrics</h3>
+                <div class="metric">
+                    <span class="label">PEP Accounts:</span>
+                    <span class="value">7</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Sanctioned:</span>
+                    <span class="value">3</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Transaction Alerts:</span>
+                    <span class="value">773</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Suspicious Wires:</span>
+                    <span class="value">55</span>
+                </div>
+                <div class="metric">
+                    <span class="label">SARs Filed:</span>
+                    <span class="value">20</span>
+                </div>
+            </div>
+            
+            <div class="flow-arrow">↓</div>
+            
+            <div class="flow-node output">
+                <h3>Analysis Complete</h3>
+                <div class="stat">Total Issues: 31</div>
+            </div>
+        </div>
+        
+        <div class="data-summary">
+            <h3>Data Processing Pipeline</h3>
+            <ul>
+                <li>✓ 100 accounts analyzed</li>
+                <li>✓ 2713 transactions processed</li>
+                <li>✓ 415 wire transfers examined</li>
+                <li>✓ 454 audit log entries reviewed</li>
+                <li>✓ ML model trained with 100 samples</li>
+                <li>✓ SHAP explainability computed</li>
+            </ul>
+        </div>
+    </div>
+    
+        </div>
+        
+        <div class="right-panel">
+            
+    <div class="role-report">
+        <h2>⚖️ Regulatory Officer Dashboard</h2>
+        <p class="role-description">Focus: Regulatory compliance, violations, reporting requirements</p>
+        
+        <div class="regulatory-summary">
+            <h3>Regulatory Compliance Summary</h3>
+            <div class="compliance-grid">
+                <div class="compliance-box">
+                    <h4>Bank Secrecy Act (BSA)</h4>
+                    <div class="status">✓ 20 SARs Filed</div>
+                    <div class="status">✓ 10 CTR Candidates</div>
+                </div>
+                <div class="compliance-box">
+                    <h4>USA PATRIOT Act</h4>
+                    <div class="status">⚠️ 7 PEP Accounts (EDD Required)</div>
+                    <div class="status">✓ CIP Compliance Reviewed</div>
+                </div>
+                <div class="compliance-box">
+                    <h4>OFAC Compliance</h4>
+                    <div class="status">🔴 3 Sanctions Violations</div>
+                    <div class="status">✓ Watchlist Screening Complete</div>
+                </div>
+                <div class="compliance-box">
+                    <h4>FinCEN Regulations</h4>
+                    <div class="status">✓ 100 Accounts CDD Complete</div>
+                    <div class="status">✓ 0 Pending KYC</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="violations-section">
+            <h3>⚠️ Compliance Violations & Issues</h3>
+    <table class='data-table violations-table'><thead><tr><th>Severity</th><th>Regulation</th><th>Account</th><th>Description</th><th>Required Action</th></tr></thead><tbody>
+            <tr class="high">
+                <td><span class="badge high">HIGH</span></td>
+                <td>FinCEN CDD Rule</td>
+                <td>RAW10000</td>
+                <td>PEP beneficial ownership not verified</td>
+                <td>Complete beneficial ownership verification</td>
+            </tr>
+            
+            <tr class="high">
+                <td><span class="badge high">HIGH</span></td>
+                <td>FinCEN CDD Rule</td>
+                <td>RAW10014</td>
+                <td>PEP beneficial ownership not verified</td>
+                <td>Complete beneficial ownership verification</td>
+            </tr>
+            
+            <tr class="critical">
+                <td><span class="badge critical">CRITICAL</span></td>
+                <td>OFAC</td>
+                <td>RAW10026</td>
+                <td>Account holder on sanctions list</td>
+                <td>Immediate account freeze and OFAC reporting</td>
+            </tr>
+            
+            <tr class="high">
+                <td><span class="badge high">HIGH</span></td>
+                <td>FinCEN CDD Rule</td>
+                <td>RAW10030</td>
+                <td>PEP beneficial ownership not verified</td>
+                <td>Complete beneficial ownership verification</td>
+            </tr>
+            
+            <tr class="high">
+                <td><span class="badge high">HIGH</span></td>
+                <td>FinCEN CDD Rule</td>
+                <td>RAW10038</td>
+                <td>PEP beneficial ownership not verified</td>
+                <td>Complete beneficial ownership verification</td>
+            </tr>
+            
+            <tr class="high">
+                <td><span class="badge high">HIGH</span></td>
+                <td>FinCEN CDD Rule</td>
+                <td>RAW10043</td>
+                <td>PEP beneficial ownership not verified</td>
+                <td>Complete beneficial ownership verification</td>
+            </tr>
+            
+            <tr class="high">
+                <td><span class="badge high">HIGH</span></td>
+                <td>FinCEN CDD Rule</td>
+                <td>RAW10095</td>
+                <td>PEP beneficial ownership not verified</td>
+                <td>Complete beneficial ownership verification</td>
+            </tr>
+            
+            <tr class="critical">
+                <td><span class="badge critical">CRITICAL</span></td>
+                <td>OFAC</td>
+                <td>RAW10071</td>
+                <td>Account holder on sanctions list</td>
+                <td>Immediate account freeze and OFAC reporting</td>
+            </tr>
+            
+            <tr class="critical">
+                <td><span class="badge critical">CRITICAL</span></td>
+                <td>OFAC</td>
+                <td>RAW10077</td>
+                <td>Account holder on sanctions list</td>
+                <td>Immediate account freeze and OFAC reporting</td>
+            </tr>
+            
+            <tr class="high">
+                <td><span class="badge high">HIGH</span></td>
+                <td>FinCEN CDD Rule</td>
+                <td>RAW10077</td>
+                <td>PEP beneficial ownership not verified</td>
+                <td>Complete beneficial ownership verification</td>
+            </tr>
+            </tbody></table>
+        </div>
+        
+        <div class="reporting-requirements">
+            <h3>📋 Reporting Requirements</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Report Type</th>
+                        <th>Count</th>
+                        <th>Deadline</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Suspicious Activity Reports (SAR)</td>
+                        <td>20</td>
+                        <td>30 days from detection</td>
+                        <td><span class="badge green">Filed</span></td>
+                    </tr>
+                    <tr>
+                        <td>Currency Transaction Reports (CTR)</td>
+                        <td>10</td>
+                        <td>15 days from transaction</td>
+                        <td><span class="badge yellow">Pending Review</span></td>
+                    </tr>
+                    <tr>
+                        <td>OFAC Sanctions Reports</td>
+                        <td>3</td>
+                        <td>Immediate (within 24 hours)</td>
+                        <td><span class="badge red">URGENT</span></td>
+                    </tr>
+                    <tr>
+                        <td>Enhanced Due Diligence (EDD)</td>
+                        <td>7</td>
+                        <td>Before account relationship</td>
+                        <td><span class="badge yellow">In Progress</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+        </div>
+    </div>
+</body>
+</html>
+    
